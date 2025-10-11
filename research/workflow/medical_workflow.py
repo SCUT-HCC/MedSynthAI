@@ -36,11 +36,11 @@ class MedicalWorkflow:
         self.logger = WorkflowLogger(case_data=case_data, log_dir=log_dir, case_index=case_index)
         
         # 重置历史评分，确保新的工作流从零开始
-        StepExecutor.reset_historical_scores()
+        StepExecutor.reset_historical_scores() #StepExecutor单步执行器
         
         # 初始化工作流状态
         self.current_step = 0
-        self.conversation_history = ""
+        self.conversation_history = ""   # 完整对话历史
         self.current_hpi = ""
         self.current_ph = ""
         self.current_chief_complaint = ""
