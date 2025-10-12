@@ -73,12 +73,12 @@ class MedicalWorkflow:
                     self.workflow_success = True
                     break
                 
-                # 执行当前step
+                # 执行单个step
                 if not self._execute_single_step(step):
                     print(f"Step {step} 执行失败，工作流终止")
                     break
                 
-                # 显示进度
+                # 打印step进度信息
                 self._print_step_progress(step)
             
             # 如果达到最大步数但任务未完成

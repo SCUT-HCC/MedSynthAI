@@ -34,13 +34,12 @@ MedSynthAI/
 │   ├── recipient/         # 接诊Agent
 │   ├── triager/           # 分诊Agent
 │   ├── monitor/           # 监控Agent
-│   ├── task_controller/   # 任务控制Agent
+│   ├── controller/        # 任务控制Agent
 │   ├── prompter/          # 提示词Agent
 │   ├── inquirer/          # 询问Agent
 │   └── evaluator/         # 评估Agent
 │
 ├── research/              # 科研模式（规划中）
-│   ├── batch_runner.py    # 批量执行入口
 │   ├── workflow/          # 完整工作流实现
 │       ├── medical_workflow.py    # 主工作流控制器
 │           ├── task_manager.py        # 任务阶段管理
@@ -55,7 +54,6 @@ MedSynthAI/
 │   ├── core/              # 核心业务逻辑
 │   ├── models/            # 数据模型
 │   └── persistence/       # 数据持久化
-    
 ```
 
 ## 快速开始
