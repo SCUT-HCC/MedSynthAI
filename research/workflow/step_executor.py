@@ -10,7 +10,8 @@ from agent_system.virtual_patient import VirtualPatientAgent
 from agent_system.evaluator import Evaluator
 from .task_manager import TaskManager, TaskPhase
 from .workflow_logger import WorkflowLogger
-from guidance.loader import get_comparison_guidance
+from guidance.loader import get_comparison_guidance, _update_guidance_for_Triager
+
 
 class StepExecutor:
     """
@@ -85,6 +86,9 @@ class StepExecutor:
                     previous_hpi: str = "",
                     previous_ph: str = "",
                     previous_chief_complaint: str = "",
+                    previous_department: str = "",
+                    previous_candidate_department = "",
+                    current_guidance: str = "",
                     is_first_step: bool = False,
                     doctor_question: str = "") -> Dict[str, Any]:
         """
@@ -99,6 +103,9 @@ class StepExecutor:
             previous_hpi: 上轮现病史
             previous_ph: 上轮既往史
             previous_chief_complaint: 上轮主诉
+            previous_department: 上轮分诊主要科室
+            previous_candidate_department: 上轮分诊候选科室
+            current_guidance: 当前指导文本
             is_first_step: 是否为第一个step
             doctor_question: 医生问题（非首轮时）
             
@@ -115,7 +122,9 @@ class StepExecutor:
             "triage_result": {
                 "primary_department": "",
                 "secondary_department": "",
-                "triage_reasoning": ""
+                "triage_reasoning": "",
+                "candidate_primary_department": "",
+                "candidate_secondary_department": ""
             },
             "doctor_question": "",
             "conversation_history": conversation_history,
@@ -161,8 +170,19 @@ class StepExecutor:
                 step_result["triage_result"] = {
                     "primary_department": triage_result.primary_department,
                     "secondary_department": triage_result.secondary_department,
-                    "triage_reasoning": triage_result.triage_reasoning
+                    "triage_reasoning": triage_result.triage_reasoning,
+                    "candidate_primary_department": triage_result.candidate_primary_department,
+                    "candidate_secondary_department": triage_result.candidate_secondary_department
                 }
+
+                department = f"{triage_result.primary_department}-{triage_result.secondary_department}"
+                candidate_department = f"{triage_result.candidate_primary_department}-{triage_result.candidate_secondary_department}"
+                self.previous_department = department
+                self.previous_candidate_department = candidate_department
+
+                # 根据预测科室动态更新指导
+                new_guidance = self._update_guidance_for_Triager(department)
+
             else:
                 # 分诊已完成或已超过分诊阶段，使用已有的分诊结果
                 existing_triage = step_result.get("triage_result", {})
@@ -293,18 +313,21 @@ class StepExecutor:
         start_time = time.time()
         
         #构建department_comparison_guidance
-        comparison_guidance = ""
+        comparison_guidance = ""   
         # 如果存在上一轮的分诊结果，并且有主要科室和候选科室，则生成对比指导
+        if self.previous_department and self.previous_candidate_department:
+            comparison_guidance = get_comparison_guidance(previous_department, previous_candidate_department)
         
-        if self.last_triage_result and self.last_triage_result.primary_department and self.last_triage_result.candidate_secondary_department:
-            dept1 = f"{self.last_triage_result.primary_department}-{self.last_triage_result.secondary_department}"
-            dept2 = f"{self.last_triage_result.candidate_primary_department}-{self.last_triage_result.candidate_secondary_department}"
-            comparison_guidance = get_comparison_guidance(dept1, dept2)
+        # 将对比指导与常规指导合并
+            combined_guidance = self.current_guidance
+            if comparison_guidance:
+                combined_guidance += f"\n\n【科室对比鉴别指导】\n{comparison_guidance}"
 
         input_data = {
             "chief_complaint": recipient_result.chief_complaint,
             "hpi_content": recipient_result.updated_HPI,
-            "ph_content": recipient_result.updated_PH
+            "ph_content": recipient_result.updated_PH,
+            "combined_guidance": combined_guidance,
         }
         
         result = self.triager.run(**input_data)
@@ -480,15 +503,20 @@ class StepExecutor:
                          recipient_result, prompter_result) -> str:
         """执行Inquirer agent"""
         start_time = time.time()
-        
+
         try:
+            if new_guidance != self.current_guidance:
+                self.current_guidance = new_guidance
+        
             # 使用Prompter生成的描述和指令初始化Inquirer
             inquirer = Inquirer(
                 description=prompter_result.description,
                 instructions=prompter_result.instructions,
                 model_type=self.model_type,
-                llm_config=self.llm_config
+                llm_config=self.llm_config,
+                department_inquiry_guidance=new_guidance,
             )
+            # print(f"🔄 已切换到 '{first_department}' 科室的询问指导")
             
             input_data = {
                 "hpi_content": recipient_result.updated_HPI,
