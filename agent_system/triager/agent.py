@@ -40,7 +40,7 @@ class TriageAgent(BaseAgent):
             use_cache=False
         )
     
-    def run(self, chief_complaint: str, hpi_content: str = "", ph_content: str = "") -> TriageResult:
+    def run(self, chief_complaint: str, hpi_content: str = "", ph_content: str = "", current_guidance = "") -> TriageResult:
         """
         执行科室分诊
         
@@ -51,6 +51,7 @@ class TriageAgent(BaseAgent):
             chief_complaint (str): 患者主诉，描述主要症状和不适
             hpi_content (str, optional): 现病史内容，详细的症状发展过程，默认为空字符串
             ph_content (str, optional): 既往史内容，患者的历史疾病信息，默认为空字符串
+            current_guidance (str, optional): 当前轮次的分诊指导（可选），默认为空字符串
             
         Returns:
             TriageResult: 包含分诊结果的结构化数据，包括：
@@ -63,7 +64,7 @@ class TriageAgent(BaseAgent):
         """
         try:
             # 构建分诊分析提示词
-            prompt = self.build_prompt(chief_complaint, hpi_content, ph_content)
+            prompt = self.build_prompt(chief_complaint, hpi_content, ph_content, current_guidance)
             
             # 调用基类的run方法执行LLM推理
             result = super().run(prompt)
@@ -76,7 +77,7 @@ class TriageAgent(BaseAgent):
             print(f"科室分诊分析失败: {str(e)}")
             return self._get_fallback_result()
     
-    def build_prompt(self, chief_complaint: str, hpi_content: str = "", ph_content: str = "") -> str:
+    def build_prompt(self, chief_complaint: str, hpi_content: str = "", ph_content: str = "", current_guidance: str = "") -> str:
         """
         构建科室分诊的提示词模板
         
@@ -87,6 +88,7 @@ class TriageAgent(BaseAgent):
             chief_complaint (str): 患者主诉
             hpi_content (str): 现病史内容
             ph_content (str): 既往史内容
+            current_guidance (str): 当前轮次的分诊指导（可选）
             
         Returns:
             str: 精简的分诊分析提示词
@@ -110,6 +112,12 @@ class TriageAgent(BaseAgent):
 
 请严格按照上述JSON格式输出，确保一级科室和二级科室的对应关系正确。
 输出内容为:"""
+        # 如果有当前科室的指导，加入到prompt中
+        if current_guidance:
+            prompt += f"当前科室询问指导：\n{current_guidance}\n\n"
+            prompt += "【重要】请重点参考上述指导中的科室鉴别要点，特别注意【排除XX科】【vsXX科】等相邻科室混淆提示。\n\n"
+        
+        prompt += "请根据以上信息推荐一个最合适的科室。采用宏观判断原则，重点关注症状的治疗方式（手术vs药物）和专科归属，避免纠结细节。\n"
         
         return prompt
     

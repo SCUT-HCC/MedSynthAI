@@ -10,6 +10,7 @@ from agent_system.virtual_patient import VirtualPatientAgent
 from agent_system.evaluator import Evaluator
 from .task_manager import TaskManager, TaskPhase
 from .workflow_logger import WorkflowLogger
+from guidance.loader import get_comparison_guidance
 
 class StepExecutor:
     """
@@ -291,6 +292,15 @@ class StepExecutor:
         """执行Triage agent进行科室分诊"""
         start_time = time.time()
         
+        #构建department_comparison_guidance
+        comparison_guidance = ""
+        # 如果存在上一轮的分诊结果，并且有主要科室和候选科室，则生成对比指导
+        
+        if self.last_triage_result and self.last_triage_result.primary_department and self.last_triage_result.candidate_secondary_department:
+            dept1 = f"{self.last_triage_result.primary_department}-{self.last_triage_result.secondary_department}"
+            dept2 = f"{self.last_triage_result.candidate_primary_department}-{self.last_triage_result.candidate_secondary_department}"
+            comparison_guidance = get_comparison_guidance(dept1, dept2)
+
         input_data = {
             "chief_complaint": recipient_result.chief_complaint,
             "hpi_content": recipient_result.updated_HPI,
@@ -303,9 +313,13 @@ class StepExecutor:
         output_data = {
             "primary_department": result.primary_department,
             "secondary_department": result.secondary_department,
-            "triage_reasoning": result.triage_reasoning
+            "triage_reasoning": result.triage_reasoning,
+            "candidate_primary_department": result.candidate_primary_department,
+            "candidate_secondary_department": result.candidate_secondary_department,
         }
-        
+        #在日志中加入对比指导信息
+        log_input_data = input_data.copy()
+        log_input_data["used_comparison_guidance"] = bool(comparison_guidance)
         logger.log_agent_execution(step_num, "triager", input_data, output_data, execution_time)
         
         return result
