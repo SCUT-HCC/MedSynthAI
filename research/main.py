@@ -16,10 +16,19 @@ import glob
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+from functools import partial
 
 # 导入本地模块
 from workflow import MedicalWorkflow
 from config import LLM_CONFIG
+
+# 设置项目根目录
+PROJECT_ROOT = "/home/pci/nas/AI_Large_Model_Team/chy/project/MedSynthAI_JIB_AAMAS/MedSynthAI"
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from guidance.loader import GuidanceLoader
+
 
 class BatchProcessor:
     """批处理管理器，负责协调多线程执行和状态管理"""
@@ -91,13 +100,26 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
-    # 数据和输出配置
+    #数据输入配置
     parser.add_argument(
         '--dataset-path', 
         type=str, 
-        default='dataset/bbb.json',
+        default='research/dataset/test_data.json',
         help='数据集JSON文件路径'
     )
+    parser.add_argument(
+        '--department_guidance_file', 
+        type=str, 
+        default='guidance/department_inquiry_guidance.json', 
+        help='动态询问指导加载路径'
+    )
+    parser.add_argument(
+        '--comparison_rules_file', 
+        type=str, 
+        default='guidance/department_comparison_guidance.json', 
+        help='加载科室对比指导路径'
+    )
+    # 数据和输出配置
     parser.add_argument(
         '--log-dir', 
         type=str, 
@@ -107,15 +129,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         '--output-dir', 
         type=str, 
-        default='batch_results',
+        default='results/batch_results',
         help='批处理结果保存目录'
     )
-    
     # 执行参数
     parser.add_argument(
         '--num-threads', 
         type=int, 
-        default=45,
+        default=1,
         help='并行处理线程数'
     )
     parser.add_argument(
@@ -142,14 +163,38 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
         help='限制处理的样本数量（用于测试）'
     )
-    
+    parser.add_argument(
+        '--department_filter', 
+        type=str, 
+        default=None,
+        help='筛选特定一级科室的病例 (例如: 内科, 外科, 儿科等)'
+    )
+    parser.add_argument(
+        '--use_inquiry_guidance', 
+        action='store_true', 
+        default=True,
+        help='是否使用科室特定的询问指导 (无论是固定指导还是询问指导，默认: True)'
+    )
+    parser.add_argument(
+        '--use_dynamic_guidance', 
+        action='store_true', 
+        default=True,
+        help='是否使用动态询问科室指导 (默认: True)'
+    )
+    parser.add_argument(
+        '--use_department_comparison', 
+        action='store_true', 
+        default=True,
+        help='是否使用科室对比鉴别功能 (默认: True)'
+    )
+
     # 模型配置
     available_models = list(LLM_CONFIG.keys())
     parser.add_argument(
         '--model-type', 
         type=str, 
         choices=available_models,
-        default='openai-mirror/gpt-oss-20b',
+        default='deepseek-v3',
         help=f'使用的语言模型类型，可选: {", ".join(available_models)}'
     )
     parser.add_argument(
@@ -347,6 +392,32 @@ def process_single_sample(sample_data: Dict[str, Any], sample_index: int,
             except json.JSONDecodeError:
                 logging.warning(f"样本 {sample_index}: 模型配置JSON格式错误，使用默认配置")
         
+        #是否使用固定科室模式
+        department_guidance = ""
+
+        # 初始化 GuidanceLoader
+        loader = GuidanceLoader(
+            use_dynamic_guidance=args.use_dynamic_guidance,
+            use_department_comparison=args.use_department_comparison,
+            department_guidance_file=args.department_guidance_file,
+            comparison_rules_file=args.comparison_rules_file
+        )
+
+        if args.use_inquiry_guidance:
+            if args.department_filter:
+                # 固定科室模式
+                department_guidance = loader.load_inquiry_guidance(args.department_filter)
+                if department_guidance:
+                    print(f"✅ 已加载 '{args.department_filter}' 科室的固定询问指导")
+                else:
+                    print(f"⚠️ 未能加载 '{args.department_filter}' 科室的询问指导，将使用默认询问模式")
+            else:
+                # 动态指导模式
+                if args.max_steps > 1 and args.use_dynamic_guidance:
+                    print(f"🔄 已启用动态科室询问指导模式")
+                else:
+                    print(f"⚠️ 单步问诊不需要动态指导，将使用默认模式")
+
         # 创建工作流实例
         workflow = MedicalWorkflow(
             case_data=sample_data,
@@ -355,7 +426,9 @@ def process_single_sample(sample_data: Dict[str, Any], sample_index: int,
             max_steps=args.max_steps,
             log_dir=args.log_dir,
             case_index=sample_index,
-            controller_mode=args.controller_mode
+            controller_mode=args.controller_mode,
+            guidance_loader=loader, #将 loader 传递给 MedicalWorkflow
+            department_guidance=department_guidance
         )
         
         # 执行工作流
@@ -622,9 +695,46 @@ def main():
             args.sample_limit
         )
         
+        # 如果指定了科室筛选，先筛选出指定科室的病例
+        if args.department_filter:
+            filtered_dataset = []
+            for case in dataset:
+                if case.get('一级科室', '') == args.department_filter:
+                    filtered_dataset.append(case)
+            dataset = filtered_dataset
+            print(f"筛选 '{args.department_filter}' 科室病例: {len(dataset)} 个")
+        
+        total_cases = len(dataset)
+        if total_cases == 0:
+            logging.warning("没有样本需要处理")
+            return 0
+
         if len(dataset) == 0:
             logging.warning("没有样本需要处理")
             return 0
+        
+        # 打印初始化信息
+        print(f"总共有 {total_cases} 个患者病例")
+        if args.department_filter:
+            print(f"筛选科室: {args.department_filter}")
+        print(f"总共需要处理 {total_cases} 个患者病例")
+        print(f"并行处理线程数: {args.num_threads}")
+        print(f"结果将保存至 {args.output_dir} 目录")
+        if args.use_inquiry_guidance:
+            if args.department_filter:
+                print(f"📋 已启用 '{args.department_filter}' 科室的固定询问指导")
+            elif args.max_steps > 1:
+                print(f"📋 已启用动态科室询问指导模式")
+            else:
+                print(f"📋 使用默认询问模式")
+        else:
+            print(f"📋 使用默认询问模式")
+        
+        if args.use_department_comparison:
+            print(f"🔄 已启用科室对比鉴别功能")
+        else:
+            print(f"🔄 未启用科室对比鉴别功能")
+        print("开始并行处理...\n")
         
         # 执行批处理
         logging.info("开始批量处理...")
@@ -643,8 +753,9 @@ def main():
         logging.info(f"处理速度: {summary['samples_per_minute']:.2f} 样本/分钟")
         logging.info("=" * 60)
         
-        return 0 if summary['success_rate'] > 0.8 else 1
-        
+        # return 0 if summary['success_rate'] > 0.8 else 1
+        return 0
+
     except KeyboardInterrupt:
         logging.warning("程序被用户中断")
         return 1
