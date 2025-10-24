@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional, ClassVar
 from pydantic import Field
 from agent_system.base import BaseResponseModel
 
@@ -12,16 +12,29 @@ class TriageResult(BaseResponseModel):
         description="分诊推理过程，解释为什么推荐该科室"
     )
     
-    primary_department: Literal[
+    # 定义一级科室列表，标记为 ClassVar
+    PRIMARY_DEPARTMENTS: ClassVar = Literal[
         "内科", "外科", "儿科", "妇产科", "皮肤性病科", 
         "口腔科", "眼科", "肿瘤科", "耳鼻咽喉科", "康复科", 
         "精神科", "全科", "体检科"
-    ] = Field(
+    ]
+    
+    # 主要推荐科室
+    primary_department: PRIMARY_DEPARTMENTS = Field(
         ...,
-        description="一级科室，必须从指定的科室列表中选择"
+        description="推荐的一级科室，必须从指定的科室列表中选择"
     )
     
     secondary_department: str = Field(
         ...,
-        description="二级科室，必须是一级科室的下属科室"
+        description="推荐的二级科室，必须是一级科室的下属科室"
+    )
+
+    # 候选科室
+    candidate_primary_department: Optional[PRIMARY_DEPARTMENTS] = Field(
+        description="候选的一级科室，用于下一轮对比鉴别"
+    )
+    
+    candidate_secondary_department: Optional[str] = Field(
+        description="候选的二级科室，必须是候选的一级科室的下属科室，用于下一轮对比鉴别"
     )
