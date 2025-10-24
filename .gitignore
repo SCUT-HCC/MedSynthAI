@@ -8,5 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# 忽略 results 目录
+results/
+
+# 其他文件
 .serena
 CLAUDE.md

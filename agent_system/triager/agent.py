@@ -150,6 +150,8 @@ class TriageAgent(BaseAgent):
             triage_reasoning="由于分诊分析过程中出现异常，系统推荐全科就诊。建议患者先到全科进行初步评估，医生会根据具体情况进一步转诊到合适的专科。",
             primary_department="全科",
             secondary_department="全科（二级）",
+            candidate_primary_department="全科",  # 默认候选一级科室
+            candidate_secondary_department="全科（二级）"  # 默认候选二级科室
         )
     
     def triage_by_chief_complaint(self, chief_complaint: str) -> TriageResult:

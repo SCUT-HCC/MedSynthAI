@@ -113,7 +113,7 @@ class Inquirer(BaseAgent):
 请严格按照上述JSON格式输出。
 输出内容为:"""
         # 添加科室特定的询问指导（如果存在）
-        if self.department_guidance:
-            prompt += f"\n科室询问指导：\n{self.department_guidance}\n"
+        if self.department_inquiry_guidance:
+            prompt += f"\n科室询问指导：\n{self.department_inquiry_guidance}\n"
             prompt += "优先考虑科室询问指导中的建议。\n"
         return prompt

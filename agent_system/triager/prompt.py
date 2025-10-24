@@ -132,9 +132,9 @@ class TriagerPrompt(BasePrompt):
   }
 
   {
-    "triage_reasoning": "患者反复头痛伴眩晕，无外伤史，MRI未发现颅内结构异常，符合神经内科慢性头痛特征。症状属于非外伤性、慢性、药物治疗导向，推荐内科/神经内科。",
-    "primary_department": "内科",
-    "secondary_department": "神经内科",
-    "candidate_primary_department": null,
-    "candidate_secondary_department": null
+  "triage_reasoning": "患者反复头痛伴眩晕，无外伤史，MRI未发现颅内结构异常，符合神经内科慢性头痛特征。症状属于非外伤性、慢性、药物治疗导向，推荐内科/神经内科。",
+  "primary_department": "内科",
+  "secondary_department": "神经内科",
+  "candidate_primary_department": "外科",
+  "candidate_secondary_department": "神经外科"
   }"""
