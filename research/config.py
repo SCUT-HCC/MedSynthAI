@@ -1,3 +1,20 @@
+"""
+项目配置模块。
+
+该模块负责从环境变量（.env文件）中加载敏感配置（如API密钥），
+并定义了整个项目中使用的各种静态配置，包括：
+- LLM 提供商的 API Keys 和 Base URLs。
+- 项目根目录路径。
+- 不同 LLM 模型的配置信息 (LLM_CONFIG)。
+- Agent 的特定模型配置 (AGENT_CONFIG)。
+- RAG (检索增强生成) 的相关配置 (RAG_CONFIG)。
+
+所有配置项都应在此文件中统一定义，以便于管理和维护。
+"""
+import os
+from typing import Dict, Optional, Any
+from dotenv import load_dotenv
+
 # 从 .env 文件加载环境变量
 load_dotenv()
 
@@ -14,7 +31,7 @@ OLLAMA_BASE_URL: Optional[str] = os.getenv("OLLAMA_BASE_URL", "http://your-ollam
 LOCAL_API_KEY: Optional[str] = os.getenv("LOCAL_API_KEY", "local")
 LOCAL_BASE_URL: Optional[str] = os.getenv("LOCAL_BASE_URL", "http://your-ollama-server:11434/v1")
 
-BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # LLM model configuration based on agno
 LLM_CONFIG = {
@@ -116,7 +133,7 @@ RAG_CONFIG = {
     },
     "chroma_db": {
         "api_key": ALIBABA_API_KEY,
-        "base_url": "ALIBABA_BASE_URL",
+        "base_url": ALIBABA_BASE_URL,
         "collection_name": "doctor",
         "batch_size": 100,
         "chroma_db_path": os.path.join(BASE_DIR, "static/rag/chroma_db"),
