@@ -121,7 +121,7 @@ RAG_CONFIG = {
         "max_token_size": 512
     },
     "chroma_db": {
-        "api_key": API_KEY,
+        "api_key": ALIBABA_API_KEY,
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "collection_name": "doctor",
         "batch_size": 100,
