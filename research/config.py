@@ -1,26 +1,20 @@
-import os
-from dotenv import load_dotenv
-
 # 从 .env 文件加载环境变量
 load_dotenv()
 
 # 从环境变量中获取 API Keys 和 Base URLs
-ALIBABA_API_KEY = os.getenv("ALIBABA_API_KEY")
-ALIBABA_BASE_URL = os.getenv("ALIBABA_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+ALIBABA_API_KEY: Optional[str] = os.getenv("ALIBABA_API_KEY")
+ALIBABA_BASE_URL: Optional[str] = os.getenv("ALIBABA_BASE_URL", "http://your-ollama-server:11434/v1")
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_API_KEY: Optional[str] = os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_BASE_URL: Optional[str] = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://100.82.33.121:19090/v1")
+OLLAMA_API_KEY: Optional[str] = os.getenv("OLLAMA_API_KEY", "ollama")
+OLLAMA_BASE_URL: Optional[str] = os.getenv("OLLAMA_BASE_URL", "http://your-ollama-server:11434/v1")
 
-LOCAL_API_KEY = os.getenv("LOCAL_API_KEY", "local")
-LOCAL_BASE_URL = os.getenv("LOCAL_BASE_URL", "http://127.0.0.1:8000/v1")
+LOCAL_API_KEY: Optional[str] = os.getenv("LOCAL_API_KEY", "local")
+LOCAL_BASE_URL: Optional[str] = os.getenv("LOCAL_BASE_URL", "http://your-ollama-server:11434/v1")
 
-
-# {project_root}/medsynthai
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
+BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # LLM model configuration based on agno
 LLM_CONFIG = {
@@ -122,7 +116,7 @@ RAG_CONFIG = {
     },
     "chroma_db": {
         "api_key": ALIBABA_API_KEY,
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "base_url": "ALIBABA_BASE_URL",
         "collection_name": "doctor",
         "batch_size": 100,
         "chroma_db_path": os.path.join(BASE_DIR, "static/rag/chroma_db"),

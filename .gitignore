@@ -11,3 +11,7 @@ wheels/
 
 .serena
 CLAUDE.md
+
+.env
+.env.local
+*.env
