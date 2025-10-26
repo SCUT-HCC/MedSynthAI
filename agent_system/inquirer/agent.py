@@ -21,7 +21,7 @@ class Inquirer(BaseAgent):
         llm_config (dict): LLM模型配置参数
     """
     
-    def __init__(self, description: str, instructions: list, model_type: str = "gpt-oss:latest", llm_config: dict = None):
+    def __init__(self, description: str, instructions: list, model_type: str = "gpt-oss:latest", llm_config: dict = None, department_inquiry_guidance: str = ""):
         """
         初始化Inquirer智能体
         
@@ -30,7 +30,9 @@ class Inquirer(BaseAgent):
             instructions (list): 由Prompter生成的指令列表
             model_type (str): 大语言模型类型，默认使用 gpt-oss:latest
             llm_config (dict): LLM模型的配置参数，如果为None则使用默认配置
+            department_inquiry_guidance (str): 科室询问指导，用于优化问诊问题生成
         """
+        self.department_inquiry_guidance = department_inquiry_guidance
         # 将Prompter生成的指令与固定格式指令拼接
         complete_instructions = instructions.copy()
         complete_instructions.extend(InquirerPrompt.get_fixed_format_instructions())
@@ -110,5 +112,8 @@ class Inquirer(BaseAgent):
 
 请严格按照上述JSON格式输出。
 输出内容为:"""
-        
+        # 添加科室特定的询问指导（如果存在）
+        if self.department_inquiry_guidance:
+            prompt += f"\n科室询问指导：\n{self.department_inquiry_guidance}\n"
+            prompt += "优先考虑科室询问指导中的建议。\n"
         return prompt
