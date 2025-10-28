@@ -13,15 +13,29 @@ import os
 import threading
 from typing import Dict, Any, Optional
 
-# 导入 Pydantic 验证错误
+# 导入 Pydantic 相关模块
 from pydantic import ValidationError
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 占位符，表示这些变量将通过 __getattr__ 动态加载 (使用更精确的类型提示)
+# 为IDE和类型检查器提供类型提示，实际值通过 __getattr__ 延迟加载
 LLM_CONFIG: Dict[str, Dict[str, Any]]
 AGENT_CONFIG: Dict[str, str]
 RAG_CONFIG: Dict[str, Dict[str, Any]]
 
-_settings: Optional['AppSettings'] = None
+# 将 AppSettings 定义在模块级别，以避免在函数内重复创建
+class AppSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
+    ALIBABA_API_KEY: str = ""
+    DEEPSEEK_API_KEY: str = ""
+    ALIBABA_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    OLLAMA_API_KEY: str = "ollama"
+    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+    LOCAL_API_KEY: str = "local"
+    LOCAL_BASE_URL: str = "http://localhost:11434/v1"
+
+# 内部缓存变量
+_settings: Optional[AppSettings] = None
 _llm_config: Optional[Dict[str, Any]] = None
 _agent_config: Optional[Dict[str, str]] = None
 _rag_config: Optional[Dict[str, Any]] = None
@@ -33,98 +47,28 @@ _agent_config_lock = threading.Lock()
 _rag_config_lock = threading.Lock()
 
 
-# 项目根目录路径，这个可以立即定义
-# 它在配置模块中很常见，方便其他部分（如RAG）构建绝对路径
+# 项目根目录路径
 BASE_DIR: str = os.path.dirname(os.path.abspath(__file__))
 
-def _get_settings() -> 'AppSettings':
+def _get_settings() -> AppSettings:
     """
     内部函数：获取并缓存Pydantic配置实例（线程安全）。
     """
     global _settings
-    # 只有在第一次调用时才导入 pydantic 并加载配置
     if _settings is None:
         with _settings_lock:
             if _settings is None:  # 双重检查锁定
-                from pydantic_settings import BaseSettings, SettingsConfigDict
-
-                class AppSettings(BaseSettings):
-                    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
-                    ALIBABA_API_KEY: str = ""
-                    DEEPSEEK_API_KEY: str = ""
-                    ALIBABA_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
-                    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
-                    OLLAMA_API_KEY: str = "ollama"
-                    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
-                    LOCAL_API_KEY: str = "local"
-                    LOCAL_BASE_URL: str = "http://localhost:11434/v1"
-                
                 try:
                     _settings = AppSettings()
                 except ValidationError as e:
                     raise RuntimeError(
-                        "配置加载失败。请检查 .env 文件是否存在且格式正确。\n"
+                        "配置加载失败。请执行以下步骤：\n"
+                        "1. 复制 .env.example 到 .env\n"
+                        "2. 填写必要的 API 密钥\n"
                         f"详细错误: {e}"
                     ) from e
     return _settings
 
-def _build_llm_config() -> Dict[str, Any]:
-    """内部函数：构建LLM配置字典（线程安全）。"""
-    global _llm_config
-    if _llm_config is None:
-        with _llm_config_lock:
-            if _llm_config is None: # 双重检查锁定
-                settings = _get_settings()
-                _llm_config = {
-                    "deepseek": {"class": "DeepSeek", "params": {"id": "deepseek-chat", "api_key": settings.DEEPSEEK_API_KEY, "base_url": settings.DEEPSEEK_BASE_URL}},
-                    "gpt-oss:latest": {"class": "OpenAILike", "params": {"id": "gpt-oss", "base_url": settings.OLLAMA_BASE_URL, "api_key": settings.OLLAMA_API_KEY}},
-                    "phi4": {"class": "OpenAILike", "params": {"id": "microsoft/phi-4", "base_url": settings.LOCAL_BASE_URL, "api_key": settings.LOCAL_API_KEY}},
-                    "Qwen3-7B": {"class": "OpenAILike", "params": {"id": "qwen3", "base_url": settings.OLLAMA_BASE_URL, "api_key": settings.OLLAMA_API_KEY}},
-                    "Gemma3-4b": {"class": "OpenAILike", "params": {"id": "gemma-3-4b-it", "base_url": settings.OLLAMA_BASE_URL, "api_key": settings.OLLAMA_API_KEY}},
-                    "deepseek-v3": {"class": "OpenAILike", "params": {"id": "deepseek-v3", "base_url": settings.ALIBABA_BASE_URL, "api_key": settings.ALIBABA_API_KEY}},
-                    "deepseek-r1": {"class": "OpenAILike", "params": {"id": "deepseek-r1", "base_url": settings.ALIBABA_BASE_URL, "api_key": settings.ALIBABA_API_KEY}},
-                    "qwen-max": {"class": "OpenAILike", "params": {"id": "qwen-max", "base_url": settings.ALIBABA_BASE_URL, "api_key": settings.ALIBABA_API_KEY}},
-                    "qwen-vl-max": {"class": "OpenAILike", "params": {"id": "qwen-vl-max", "base_url": settings.ALIBABA_BASE_URL, "api_key": settings.ALIBABA_API_KEY}},
-                    "aliyun": {"class": "OpenAILike", "params": {"id": "qwen-max", "base_url": settings.ALIBABA_BASE_URL, "api_key": settings.ALIBABA_API_KEY}},
-                }
-    return _llm_config
-
-def _build_agent_config() -> Dict[str, str]:
-    """内部函数：构建Agent配置字典（线程安全）。"""
-    global _agent_config
-    if _agent_config is None:
-        with _agent_config_lock:
-            if _agent_config is None: # 双重检查锁定
-                _agent_config = {
-                    "medical_image_analysis_agent": "qwen-vl-max"
-                }
-    return _agent_config
-
-def _build_rag_config() -> Dict[str, Any]:
-    """内部函数：构建RAG配置字典（线程安全）。"""
-    global _rag_config
-    if _rag_config is None:
-        with _rag_config_lock:
-            if _rag_config is None: # 双重检查锁定
-                settings = _get_settings()
-                _rag_config = {
-                    "lightrag": {
-                        "working_dir": "./Vector_DB_Med",
-                        "tokenizer_name": "trueto/medbert-base-chinese",
-                        "model_name": "trueto/medbert-base-chinese",
-                        "embedding_dim": 768,
-                        "max_token_size": 512
-                    },
-                    "chroma_db": {
-                        "api_key": settings.ALIBABA_API_KEY,
-                        "base_url": settings.ALIBABA_BASE_URL,
-                        "collection_name": "doctor",
-                        "batch_size": 100,
-                        "chroma_db_path": os.path.join(BASE_DIR, "static/rag/chroma_db"),
-                        "csv_path": os.path.join(BASE_DIR, "static/files/zhongkang_doctor_list.csv")
-                    }
-                }
-    return _rag_config
 def __getattr__(name: str) -> Any:
     """
     模块级别的延迟加载实现。
