@@ -11,3 +11,8 @@ wheels/
 
 .serena
 CLAUDE.md
+
+# Environment files
+# 忽略所有 .env 文件，但 .env.example 除外
+.env*
+!.env.example
