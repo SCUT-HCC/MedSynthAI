@@ -11,16 +11,17 @@
 """
 import os
 import threading
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
 # 导入 Pydantic 相关模块
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 为IDE和类型检查器提供类型提示，实际值通过 __getattr__ 延迟加载
-LLM_CONFIG: Dict[str, Dict[str, Any]]
-AGENT_CONFIG: Dict[str, str]
-RAG_CONFIG: Dict[str, Dict[str, Any]]
+# 仅在类型检查时为IDE和类型检查器提供类型提示
+if TYPE_CHECKING:
+    LLM_CONFIG: Dict[str, Dict[str, Any]]
+    AGENT_CONFIG: Dict[str, str]
+    RAG_CONFIG: Dict[str, Dict[str, Any]]
 
 # 将 AppSettings 定义在模块级别，以避免在函数内重复创建
 class AppSettings(BaseSettings):
@@ -68,6 +69,72 @@ def _get_settings() -> AppSettings:
                         f"详细错误: {e}"
                     ) from e
     return _settings
+
+def _build_llm_config() -> Dict[str, Dict[str, Any]]:
+    """构建并缓存 LLM 配置（线程安全）。"""
+    global _llm_config
+    if _llm_config is None:
+        with _llm_config_lock:
+            if _llm_config is None:
+                settings = _get_settings()
+                
+                # 运行时验证：确保至少配置了一个云服务 LLM 提供商的 API 密钥
+                if not settings.ALIBABA_API_KEY and not settings.DEEPSEEK_API_KEY:
+                    print("警告: ALIBABA_API_KEY 和 DEEPSEEK_API_KEY 均未在 .env 文件中设置。将无法使用云服务 LLM。")
+
+                _llm_config = {
+                    "alibaba": {
+                        "api_key": settings.ALIBABA_API_KEY,
+                        "base_url": settings.ALIBABA_BASE_URL,
+                        "models": ["qwen-long", "qwen-max", "qwen-plus", "qwen-turbo"],
+                    },
+                    "deepseek": {
+                        "api_key": settings.DEEPSEEK_API_KEY,
+                        "base_url": settings.DEEPSEEK_BASE_URL,
+                        "models": ["deepseek-chat", "deepseek-coder"],
+                    },
+                    "ollama": {
+                        "api_key": settings.OLLAMA_API_KEY,
+                        "base_url": settings.OLLAMA_BASE_URL,
+                        "models": ["gemma:7b", "llama3:8b"],
+                    },
+                    "local": {
+                        "api_key": settings.LOCAL_API_KEY,
+                        "base_url": settings.LOCAL_BASE_URL,
+                        "models": ["local-model"],
+                    },
+                }
+    return _llm_config
+
+def _build_agent_config() -> Dict[str, str]:
+    """构建并缓存 Agent 配置（线程安全）。"""
+    global _agent_config
+    if _agent_config is None:
+        with _agent_config_lock:
+            if _agent_config is None:
+                _agent_config = {
+                    "controller": "deepseek:deepseek-chat",
+                    "triager": "deepseek:deepseek-chat",
+                    "virtual_patient": "alibaba:qwen-long",
+                    "inquirer": "alibaba:qwen-long",
+                    "evaluator": "deepseek:deepseek-chat",
+                }
+    return _agent_config
+
+def _build_rag_config() -> Dict[str, Dict[str, Any]]:
+    """构建并缓存 RAG 配置（线程安全）。"""
+    global _rag_config
+    if _rag_config is None:
+        with _rag_config_lock:
+            if _rag_config is None:
+                _rag_config = {
+                    "guidance_path": os.path.join(BASE_DIR, "guidance"),
+                    "retriever_config": {
+                        "embedding_model": "alibaba:text-embedding-v2",
+                        "vector_store_path": os.path.join(BASE_DIR, "vector_store"),
+                    },
+                }
+    return _rag_config
 
 def __getattr__(name: str) -> Any:
     """
