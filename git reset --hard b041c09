@@ -1,0 +1,15 @@
+[33m7e9e7e4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m 完成issue2数据去重与统计分析
+[33m356f2dd[m Merge pull request #14 from SCUT-HCC/feat/add_guidance
+[33mb041c09[m 删除多余空行
+[33mbfac3a1[m 修改拼写错误
+[33m1754364[m feat: 导入 两个guidance
+[33m467eb19[m docs: 添加贡献指南到README
+[33mf743af1[m Merge pull request #2 from SCUT-HCC/add-claude-github-actions-1760965479284
+[33mc00f6f2[m "Claude Code Review workflow"
+[33m41d4a6f[m "Claude PR Assistant workflow"
+[33mc3486c7[m chore: 更新gitignore配置
+[33ma382029[m feat: 添加项目主程序入口
+[33m3310dc7[m feat: 实现科研模式医疗问诊工作流
+[33m5021b7f[m feat: 实现多Agent协同医疗问诊系统
+[33m44786ba[m docs: 添加项目概述文档
+[33m756a24a[m feat: 初始化项目配置和依赖管理
