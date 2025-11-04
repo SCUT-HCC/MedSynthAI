@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 AIM医疗问诊工作流批处理系统
 使用多线程并行处理数据集中的所有病例样本
@@ -82,16 +80,31 @@ class BatchProcessor:
                 'samples_per_minute': self.processed_count / max(elapsed_time / 60, 0.01)
             }
 
-def setup_logging(log_level: str = "INFO") -> None:
+def setup_logging(log_dir: str, log_level: str = "INFO") -> None:
     """设置日志记录配置"""
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    
+    # 确保日志目录存在
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # 设置日志文件名
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = os.path.join(log_dir, f"batch_processing_{timestamp}.log")
+
+    # 移除所有现有的处理器，以避免重复记录
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+        
+    # 配置日志记录
     logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
+        level=level,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(f'batch_processing_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+            logging.FileHandler(log_filename, encoding='utf-8')
         ]
     )
+    
 
 def parse_arguments() -> argparse.Namespace:
     """解析命令行参数"""
@@ -131,6 +144,12 @@ def parse_arguments() -> argparse.Namespace:
         type=str, 
         default='results/batch_results',
         help='批处理结果保存目录'
+    )
+    parser.add_argument(
+        '--batch-log-dir', 
+        type=str, 
+        default='results/logs',
+        help='批处理运行时日志保存目录'
     )
     # 执行参数
     parser.add_argument(
@@ -654,7 +673,7 @@ def main():
         return 0
     
     # 设置日志
-    setup_logging(args.log_level)
+    setup_logging(args.batch_log_dir, args.log_level)
     
     logging.info("=" * 60)
     logging.info("AIM医疗问诊工作流批处理系统启动")

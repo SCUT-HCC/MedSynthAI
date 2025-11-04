@@ -1,6 +1,7 @@
 import os
 
-API_KEY = "sk-091a216bd8874050899bbe3e8adceb83"
+API_KEY = "sk-be45d7f87e6647f085d02e6433629d1f"
+# API_KEY = "sk-qRWFmpfAoJ8Qo72JF0726f0bA1174a5aBbF0D92e4418B511"
 
 
 # {project_root}/medsynthai
@@ -16,7 +17,7 @@ LLM_CONFIG = {
             "base_url": "https://api.deepseek.com"
         }
     },
-    "gpt-oss:latest": {
+    "C": {
         "class": "OpenAILike",
         "params": {
             "id": "gpt-oss",

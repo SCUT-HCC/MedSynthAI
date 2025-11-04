@@ -216,6 +216,9 @@ class StepExecutor:
                     "candidate_primary_department": candidate_primary_department,
                     "candidate_secondary_department": candidate_secondary_department
                 }
+                # 使用已有分诊结果更新指导
+                new_guidance = current_guidance
+
             # Step 4: 使用Monitor评估任务完成度
             monitor_results = self._execute_monitor_by_phase(
                 step_num, logger, task_manager, recipient_result, step_result.get("triage_result", {})
@@ -250,6 +253,7 @@ class StepExecutor:
             
             # Step 10: 获取任务完成情况摘要
             step_result["task_completion_summary"] = task_manager.get_completion_summary()
+            step_result["new_guidance"] = new_guidance
             
             step_result["success"] = True
             

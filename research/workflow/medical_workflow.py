@@ -197,7 +197,7 @@ class MedicalWorkflow:
         self.current_chief_complaint = step_result["updated_chief_complaint"]
         self.current_triage = step_result["triage_result"]
         self._last_doctor_question = step_result["doctor_question"]
-    
+        self.current_guidance = step_result.get("new_guidance", self.current_guidance)
     def _print_step_progress(self, step_num: int):
         """
         打印step进度信息
