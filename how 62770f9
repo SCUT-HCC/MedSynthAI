@@ -1,0 +1,99 @@
+[33mcommit bcf4c2562de2c36196cb9167264f6b4aa6a76529[m
+Author: chenghongyan2025 <chenghongyan2023@163.com>
+Date:   Tue Nov 4 21:00:37 2025 +0800
+
+    feat: 更新日志记录配置，添加批处理日志目录参数，增强分诊指导信息更新
+
+[1mdiff --git a/research/config.py b/research/config.py[m
+[1mindex 5346a44..3c95b95 100644[m
+[1m--- a/research/config.py[m
+[1m+++ b/research/config.py[m
+[36m@@ -1,6 +1,7 @@[m
+ import os[m
+ [m
+[31m-API_KEY = "sk-091a216bd8874050899bbe3e8adceb83"[m
+[32m+[m[32mAPI_KEY = "sk-be45d7f87e6647f085d02e6433629d1f"[m
+[32m+[m[32m# API_KEY = "sk-qRWFmpfAoJ8Qo72JF0726f0bA1174a5aBbF0D92e4418B511"[m
+ [m
+ [m
+ # {project_root}/medsynthai[m
+[36m@@ -16,7 +17,7 @@[m [mLLM_CONFIG = {[m
+             "base_url": "https://api.deepseek.com"[m
+         }[m
+     },[m
+[31m-    "gpt-oss:latest": {[m
+[32m+[m[32m    "C": {[m
+         "class": "OpenAILike",[m
+         "params": {[m
+             "id": "gpt-oss",[m
+[1mdiff --git a/research/main.py b/research/main.py[m
+[1mindex 8ee737c..b009d74 100644[m
+[1m--- a/research/main.py[m
+[1m+++ b/research/main.py[m
+[36m@@ -1,5 +1,3 @@[m
+[31m-#!/usr/bin/env python3[m
+[31m-# -*- coding: utf-8 -*-[m
+ """[m
+ AIM医疗问诊工作流批处理系统[m
+ 使用多线程并行处理数据集中的所有病例样本[m
+[36m@@ -82,16 +80,31 @@[m [mclass BatchProcessor:[m
+                 'samples_per_minute': self.processed_count / max(elapsed_time / 60, 0.01)[m
+             }[m
+ [m
+[31m-def setup_logging(log_level: str = "INFO") -> None:[m
+[32m+[m[32mdef setup_logging(log_dir: str, log_level: str = "INFO") -> None:[m
+     """设置日志记录配置"""[m
+[32m+[m[32m    level = getattr(logging, log_level.upper(), logging.INFO)[m
+[32m+[m[41m    [m
+[32m+[m[32m    # 确保日志目录存在[m
+[32m+[m[32m    os.makedirs(log_dir, exist_ok=True)[m
+[32m+[m[41m    [m
+[32m+[m[32m    # 设置日志文件名[m
+[32m+[m[32m    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")[m
+[32m+[m[32m    log_filename = os.path.join(log_dir, f"batch_processing_{timestamp}.log")[m
+[32m+[m
+[32m+[m[32m    # 移除所有现有的处理器，以避免重复记录[m
+[32m+[m[32m    for handler in logging.root.handlers[:]:[m
+[32m+[m[32m        logging.root.removeHandler(handler)[m
+[32m+[m[41m        [m
+[32m+[m[32m    # 配置日志记录[m
+     logging.basicConfig([m
+[31m-        level=getattr(logging, log_level.upper()),[m
+[32m+[m[32m        level=level,[m
+         format='%(asctime)s - %(levelname)s - %(message)s',[m
+         handlers=[[m
+             logging.StreamHandler(),[m
+[31m-            logging.FileHandler(f'batch_processing_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')[m
+[32m+[m[32m            logging.FileHandler(log_filename, encoding='utf-8')[m
+         ][m
+     )[m
+[32m+[m[41m    [m
+ [m
+ def parse_arguments() -> argparse.Namespace:[m
+     """解析命令行参数"""[m
+[36m@@ -132,6 +145,12 @@[m [mdef parse_arguments() -> argparse.Namespace:[m
+         default='results/batch_results',[m
+         help='批处理结果保存目录'[m
+     )[m
+[32m+[m[32m    parser.add_argument([m
+[32m+[m[32m        '--batch-log-dir',[m[41m [m
+[32m+[m[32m        type=str,[m[41m [m
+[32m+[m[32m        default='results/logs',[m
+[32m+[m[32m        help='批处理运行时日志保存目录'[m
+[32m+[m[32m    )[m
+     # 执行参数[m
+     parser.add_argument([m
+         '--num-threads', [m
+[36m@@ -654,7 +673,7 @@[m [mdef main():[m
+         return 0[m
+     [m
+     # 设置日志[m
+[31m-    setup_logging(args.log_level)[m
+[32m+[m[32m    setup_logging(args.batch_log_dir, args.log_level)[m
+     [m
+     logging.info("=" * 60)[m
+     logging.info("AIM医疗问诊工作流批处理系统启动")[m
+[1mdiff --git a/research/workflow/medical_workflow.py b/research/workflow/medical_workflow.py[m
+[1mindex de204a6..bb50d11 100755[m
+[1m--- a/research/workflow/medical_workflow.py[m
+[1m+++ b/research/workflow/medical_workflo
