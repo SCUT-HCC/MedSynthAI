@@ -213,7 +213,7 @@ def parse_arguments() -> argparse.Namespace:
         '--model-type', 
         type=str, 
         choices=available_models,
-        default='deepseek-v3',
+        default='deepseek',
         help=f'使用的语言模型类型，可选: {", ".join(available_models)}'
     )
     parser.add_argument(

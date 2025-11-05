@@ -58,7 +58,7 @@ class StepExecutor:
     def extract_primary(dept: str) -> str:
         return dept.split('-')[0] if '-' in dept else dept
     
-    def __init__(self, model_type: str = "deepseek-v3", 
+    def __init__(self, model_type: str = "deepseek", 
                 llm_config: dict = None, 
                  controller_mode: str = "normal", 
                  guidance_loader: Optional = None,
@@ -97,7 +97,7 @@ class StepExecutor:
         self.prompter = Prompter(model_type=model_type, llm_config=self.llm_config)
         self.virtual_patient = VirtualPatientAgent(model_type=model_type, llm_config=self.llm_config)
         # Evaluator 固定使用 gpt-oss:latest 模型
-        self.evaluator = Evaluator(model_type="deepseek-v3", llm_config=self.llm_config)
+        self.evaluator = Evaluator(model_type="deepseek", llm_config=self.llm_config)
 
     def execute_step(self, 
                     step_num: int,

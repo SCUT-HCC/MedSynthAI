@@ -11,7 +11,7 @@ class MedicalWorkflow:
     负责协调整个30步问诊过程的执行
     """
     
-    def __init__(self, case_data: Dict[str, Any], model_type: str = "deepseek-v3", 
+    def __init__(self, case_data: Dict[str, Any], model_type: str = "deepseek", 
                  llm_config: Optional[Dict] = None, max_steps: int = 30, log_dir: str = "logs",
                  case_index: Optional[int] = None, controller_mode: str = "normal",
                  guidance_loader: Optional = None,department_guidance: str = "",):
