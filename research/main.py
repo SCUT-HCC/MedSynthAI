@@ -416,6 +416,7 @@ def process_single_sample(sample_data: Dict[str, Any], sample_index: int,
 
         # 初始化 GuidanceLoader
         loader = GuidanceLoader(
+            department_guidance = department_guidance,
             use_dynamic_guidance=args.use_dynamic_guidance,
             use_department_comparison=args.use_department_comparison,
             department_guidance_file=args.department_guidance_file,
@@ -426,6 +427,10 @@ def process_single_sample(sample_data: Dict[str, Any], sample_index: int,
             if args.department_filter:
                 # 固定科室模式
                 department_guidance = loader.load_inquiry_guidance(args.department_filter)
+                
+                # 将加载好的指导同步回 loader 实例
+                loader.department_guidance = department_guidance
+
                 if department_guidance:
                     print(f"✅ 已加载 '{args.department_filter}' 科室的固定询问指导")
                 else:
@@ -659,6 +664,10 @@ def main():
     """主入口函数"""
     # 解析参数
     args = parse_arguments()
+
+    # # 示例1：调试内科，并只处理2个样本
+    # args.department_filter = '内科'
+    # args.sample_limit = 2
     
     # 处理 --list-models 参数
     if args.list_models:
@@ -722,7 +731,11 @@ def main():
                     filtered_dataset.append(case)
             dataset = filtered_dataset
             print(f"筛选 '{args.department_filter}' 科室病例: {len(dataset)} 个")
-        
+
+            #在固定科室模式下
+            args.use_dynamic_guidance = False
+            logging.info("固定科室模式已激活，动态指导已禁用。")
+
         total_cases = len(dataset)
         if total_cases == 0:
             logging.warning("没有样本需要处理")

@@ -123,15 +123,16 @@ class GuidanceLoader:
         
         return "\n\n".join(guidance_parts)
     def _update_guidance_for_Triager(self, predicted_department: str):
+        """动态更新询问指导。如果禁用动态指导，则返回当前的指导。"""
 
-        #动态更新询问指导
+        # 如果禁用了动态指导，则直接返回当前已有的指导，不进行任何更新
         if not self.use_dynamic_guidance:
-            return None
+            return self.department_guidance
         
         first_department = predicted_department.split('-')[0] if '-' in predicted_department else predicted_department
         new_guidance = self.load_inquiry_guidance(first_department)
         
-        if new_guidance != self.current_guidance:
+        if new_guidance and new_guidance != self.current_guidance:
             self.current_guidance = new_guidance
             logger.info(f"🔄 已切换到 '{first_department}' 科室的询问指导")
         
