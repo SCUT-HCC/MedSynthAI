@@ -17,3 +17,5 @@ results_11_15testneike/
 # 其他文件
 .serena
 CLAUDE.md
+
+.env

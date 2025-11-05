@@ -1,11 +1,18 @@
 import os
-
-API_KEY = "sk-be45d7f87e6647f085d02e6433629d1f"
-# API_KEY = "sk-qRWFmpfAoJ8Qo72JF0726f0bA1174a5aBbF0D92e4418B511"
-
+from dotenv import load_dotenv
 
 # {project_root}/medsynthai
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# 从 .env 文件加载环境变量
+# .env 文件应位于项目根目录 (BASE_DIR)
+load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+# 从环境变量中获取 API_KEY
+API_KEY = os.getenv("API_KEY")
+
+if not API_KEY:
+    raise ValueError("未找到 API_KEY。请确保在项目根目录中创建了 .env 文件并设置了 API_KEY。")
 
 # LLM model configuration based on agno
 LLM_CONFIG = {
