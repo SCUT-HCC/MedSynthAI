@@ -19,3 +19,6 @@ results_11_15testneike/
 CLAUDE.md
 
 .env
+Docx/
+.gitignore
+API/
