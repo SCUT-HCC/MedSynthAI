@@ -2,7 +2,7 @@ import time
 import sys
 import os
 
-#设置动态项目目录
+# 设置动态项目目录
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -78,7 +78,7 @@ class StepExecutor:
         self.model_type = model_type
         self.llm_config = llm_config or {}
         self.controller_mode = controller_mode
-        #定义GuidanceLoader
+        # 定义GuidanceLoader
         self.guidance_loader = guidance_loader
         
         # 初始化所有agent
@@ -201,7 +201,7 @@ class StepExecutor:
 
                 department = f"{triage_result.primary_department}-{triage_result.secondary_department}"
                 # 根据预测科室动态更新指导
-                new_guidance = self.guidance_loader._update_guidance_for_Triager(department)
+                new_guidance = self.guidance_loader.update_guidance_for_Triager(department)
 
             else:
                 # 分诊已完成或已超过分诊阶段，使用已有的分诊结果
@@ -347,7 +347,7 @@ class StepExecutor:
 
         # 如果存在上一轮的分诊结果，并且有主要科室和候选科室，则生成对比指导
         if previous_department and previous_candidate_department:
-            comparison_guidance = self.guidance_loader._get_comparison_guidance(previous_department, previous_candidate_department)
+            comparison_guidance = self.guidance_loader.get_comparison_guidance(previous_department, previous_candidate_department)
             combined_guidance = current_guidance
             if comparison_guidance:
                 combined_guidance += f"\n\n【科室对比鉴别指导】\n{comparison_guidance}"

@@ -1,6 +1,5 @@
 from typing import Dict, Any, Optional
 import time
-import sys
 from .task_manager import TaskManager, TaskPhase
 from .step_executor import StepExecutor
 from .workflow_logger import WorkflowLogger

@@ -20,9 +20,6 @@ tests/
 # 文档目录
 Docx/
 
-# API 相关
-API/
-
 # 可视化文件
 research/visualizations/
 
@@ -280,3 +277,5 @@ yarn-error.log*
 Dockerfile.local
 docker-compose.override.yml
 .dockerignore.local
+API/database/db.py
+API/database_model/AudioDatabase.py

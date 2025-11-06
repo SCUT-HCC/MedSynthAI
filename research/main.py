@@ -14,7 +14,6 @@ import glob
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from functools import partial
 
 # 导入本地模块
 from workflow import MedicalWorkflow
@@ -112,7 +111,7 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
-    #数据输入配置
+    # 数据输入配置
     parser.add_argument(
         '--dataset-path', 
         type=str, 
@@ -288,15 +287,23 @@ def is_case_completed(log_dir: str, case_index: int) -> bool:
                 lines = f.readlines()
                 if not lines:
                     # 文件为空，删除
-                    os.remove(log_file)
-                    logging.info(f"删除空文件: {log_file}")
+                    try:
+                        os.remove(log_file)
+                        logging.info(f"删除空文件: {log_file}")
+                    except (OSError, FileNotFoundError, PermissionError) as e:
+                        # 文件删除失败不影响主流程，记录警告即可
+                        logging.warning(f"无法删除空文件 {log_file}: {e}")
                     continue
                 
                 last_line = lines[-1].strip()
                 if not last_line:
                     # 最后一行为空，删除
-                    os.remove(log_file)
-                    logging.info(f"删除最后一行为空的文件: {log_file}")
+                    try:
+                        os.remove(log_file)
+                        logging.info(f"删除最后一行为空的文件: {log_file}")
+                    except (OSError, FileNotFoundError, PermissionError) as e:
+                        # 文件删除失败不影响主流程，记录警告即可
+                        logging.warning(f"无法删除最后一行为空的文件 {log_file}: {e}")
                     continue
                 
                 # 解析最后一行的JSON
@@ -308,14 +315,22 @@ def is_case_completed(log_dir: str, case_index: int) -> bool:
                         return True
                     else:
                         # 文件不完整，删除
-                        os.remove(log_file)
-                        logging.info(f"删除不完整的文件: {log_file}")
+                        try:
+                            os.remove(log_file)
+                            logging.info(f"删除不完整的文件: {log_file}")
+                        except (OSError, FileNotFoundError, PermissionError) as e:
+                            # 文件删除失败不影响主流程，记录警告即可
+                            logging.warning(f"无法删除不完整的文件 {log_file}: {e}")
                         continue
                         
                 except json.JSONDecodeError:
                     # JSON解析失败，删除文件
-                    os.remove(log_file)
-                    logging.info(f"删除JSON格式错误的文件: {log_file}")
+                    try:
+                        os.remove(log_file)
+                        logging.info(f"删除JSON格式错误的文件: {log_file}")
+                    except (OSError, FileNotFoundError, PermissionError) as e:
+                        # 文件删除失败不影响主流程，记录警告即可
+                        logging.warning(f"无法删除JSON格式错误的文件 {log_file}: {e}")
                     continue
                     
         except Exception as e:
@@ -324,8 +339,16 @@ def is_case_completed(log_dir: str, case_index: int) -> bool:
             try:
                 os.remove(log_file)
                 logging.info(f"删除异常文件: {log_file}")
-            except:
-                pass
+            except (OSError, FileNotFoundError, PermissionError) as delete_error:
+                # 修复1：明确指定要捕获的异常类型
+                # 修复2：添加解释性注释
+                # 文件删除失败不是致命错误，可能是权限问题或文件已被其他进程占用
+                # 记录警告后继续处理，不中断整个检查流程
+                logging.warning(f"无法删除异常文件 {log_file}: {delete_error}")
+            except Exception as unexpected_error:
+                # 处理其他意外的删除异常（比如磁盘满等）
+                # 这些错误也不应该中断检查流程
+                logging.error(f"删除文件时发生意外错误 {log_file}: {unexpected_error}")
             continue
     
     # 所有匹配的文件都被删除或没有完整的文件

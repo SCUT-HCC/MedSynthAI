@@ -1,7 +1,6 @@
 import json
 import os
 import logging
-from typing import Dict, Any, List, Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -9,11 +8,11 @@ logger = logging.getLogger(__name__)
 class GuidanceLoader:
     def __init__(self, 
                  department_guidance: str = "",
-                 use_dynamic_guidance: bool ="", 
-                 use_department_comparison: bool="",
+                 use_dynamic_guidance: bool =False, 
+                 use_department_comparison: bool=False,
                  department_guidance_file: str = "",
                  comparison_rules_file: str = ""
-                ):
+                ) -> None:
         self.use_dynamic_guidance = use_dynamic_guidance
         self.use_department_comparison = use_department_comparison
         self.department_guidance_file = department_guidance_file
@@ -69,19 +68,28 @@ class GuidanceLoader:
             print(f"❌ 加载询问指导时出错: {e}")
             return ""
             
-    def _get_comparison_guidance(self, dept1: str, dept2: str):
+     # 公共方法接口
+    def get_comparison_guidance(self, dept1: str, dept2: str) -> str:
+        """公共方法：获取两个科室的对比鉴别指导"""
+        return self._get_comparison_guidance(dept1, dept2)
+    
+    def update_guidance_for_triager(self, predicted_department: str) -> str:
+        """公共方法：动态更新询问指导"""
+        return self._update_guidance_for_Triager(predicted_department)
+    
+    # 私有方法实现（保持向后兼容）        
+    def _get_comparison_guidance(self, dept1: str, dept2: str) -> str:
         """获取两个科室的对比鉴别指导"""
         if not self.comparison_rules:
             return ""
         
         guidance_parts = []
         
-        # 1. 获取科室对比规则
         # 提取二级科室
-        def extract_secondary(dept):
+        def extract_secondary(dept: str) -> str:
             return dept.split('-')[1] if '-' in dept else dept
         
-        def extract_primary(dept):
+        def extract_primary(dept: str) -> str:
             return dept.split('-')[0] if '-' in dept else dept
         
         sec1 = extract_secondary(dept1)
@@ -103,7 +111,7 @@ class GuidanceLoader:
                 guidance_parts.append(guidance_text)
                 break
         
-        # 2. 获取一级科室的单体指导
+        # 获取一级科室的单体指导
         primary1 = extract_primary(dept1)
         primary2 = extract_primary(dept2)
         
@@ -122,12 +130,12 @@ class GuidanceLoader:
             guidance_parts.append(guidance_text)
         
         return "\n\n".join(guidance_parts)
-    def _update_guidance_for_Triager(self, predicted_department: str):
+    
+    def _update_guidance_for_Triager(self, predicted_department: str) -> str:
         """动态更新询问指导。如果禁用动态指导，则返回当前的指导。"""
-
-        # 如果禁用了动态指导，则直接返回当前已有的指导，不进行任何更新
+        # 修复：如果禁用了动态指导，则直接返回当前已有的指导，不进行任何更新
         if not self.use_dynamic_guidance:
-            return self.department_guidance
+            return self.current_guidance  
         
         first_department = predicted_department.split('-')[0] if '-' in predicted_department else predicted_department
         new_guidance = self.load_inquiry_guidance(first_department)

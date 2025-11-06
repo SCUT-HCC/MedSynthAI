@@ -1,9 +1,7 @@
 import asyncio
 import json
 import os
-import time
 import random
-from pathlib import Path
 from typing import List, Dict, Optional
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig, CacheMode
@@ -147,25 +145,11 @@ async def extract_case_details(crawler: AsyncWebCrawler, case_url: str, referer_
     crawler.browser_config.user_agent = random.choice(USER_AGENTS)
     print(f"🔄 [详情页] 使用随机 User-Agent: {crawler.browser_config.user_agent}")
 
-    # 模拟随机滚动页面的JS脚本
-    scroll_script = """
-        async () => {
-            for (let i = 0; i < document.body.scrollHeight; i += 100) {
-                window.scrollTo(0, i);
-                await new Promise(resolve => setTimeout(resolve, Math.random() * 20 + 10));
-            }
-        }
-    """
-
     config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
         extraction_strategy=JsonCssExtractionStrategy(schema=CASE_DETAIL_SCHEMA),
         wait_for="css:div.case_study",
         page_timeout=60000,
-        # # 1. 新增：设置 Referer 请求头
-        # headers={"Referer": referer_url},
-        # 2. 新增：执行模拟滚动脚本
-        # pre_run_script=scroll_script
     )
 
     try:
