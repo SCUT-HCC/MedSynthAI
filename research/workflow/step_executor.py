@@ -72,8 +72,6 @@ class StepExecutor:
             controller_mode: 任务控制器模式，'normal'为智能模式，'sequence'为顺序模式，'score_driven'为分数驱动模式
             guidance_loader: GuidanceLoader 对象，用于加载动态指导内容
             department_inquiry_guidance: 科室询问指导文本，传递给Inquirer
-        Note:
-            Evaluator agent 固定使用 gpt-oss:latest 模型，不受 model_type 参数影响
         """
         self.model_type = model_type
         self.llm_config = llm_config or {}
@@ -96,7 +94,6 @@ class StepExecutor:
         )
         self.prompter = Prompter(model_type=model_type, llm_config=self.llm_config)
         self.virtual_patient = VirtualPatientAgent(model_type=model_type, llm_config=self.llm_config)
-        # Evaluator 固定使用 gpt-oss:latest 模型
         self.evaluator = Evaluator(model_type="deepseek", llm_config=self.llm_config)
 
     def execute_step(self, 

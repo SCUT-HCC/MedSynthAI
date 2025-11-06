@@ -1,7 +1,6 @@
 import json
 import os
 import logging
-from typing import Dict, Any, List, Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -9,8 +8,8 @@ logger = logging.getLogger(__name__)
 class GuidanceLoader:
     def __init__(self, 
                  department_guidance: str = "",
-                 use_dynamic_guidance: bool = False,  # 修复：改为 False
-                 use_department_comparison: bool = False,  # 修复：改为 False
+                 use_dynamic_guidance: bool = False,  
+                 use_department_comparison: bool = False, 
                  department_guidance_file: str = "",
                  comparison_rules_file: str = ""
                 ) -> None:

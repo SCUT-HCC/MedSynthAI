@@ -82,12 +82,12 @@ MedSynthAI/
 # 使用uv包管理器
 uv sync
 ```
-### 安装依赖
+
 #### 使用conda创建环境
     conda create -n chy python=3.12
     conda activate chy
 
-#### 安装依赖
+#### 安装库
     pip install -r requirements.txt
 
 ### 配置环境变量

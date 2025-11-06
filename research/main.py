@@ -762,10 +762,6 @@ def main():
         if total_cases == 0:
             logging.warning("没有样本需要处理")
             return 0
-
-        if len(dataset) == 0:
-            logging.warning("没有样本需要处理")
-            return 0
         
         # 打印初始化信息
         print(f"总共有 {total_cases} 个患者病例")
