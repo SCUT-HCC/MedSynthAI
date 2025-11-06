@@ -38,6 +38,9 @@ MedSynthAI/
 │   ├── prompter/          # 提示词Agent
 │   ├── inquirer/          # 询问Agent
 │   └── evaluator/         # 评估Agent
+|   
+├── data_processing /      # 数据处理模块
+│   ├── iiyi_crawl4ai_kewords.py     #数据处理代码
 │
 ├── research/              # 科研模式（规划中）
 │   ├── workflow/          # 完整工作流实现
@@ -47,20 +50,30 @@ MedSynthAI/
 │           └── workflow_logger.py     # 日志记录
 │   ├── dataset/           # 数据集管理
 │   └── evaluation/        # 评估报告生成
+|   ├── Drawing /          #绘图代码文件（规划中）
+│   └── results/
+    ├── batch_report_YYYYMMDD_HHMMSS.json    # 详细的JSON格式报告
+    ├── batch_summary_YYYYMMDD_HHMMSS.txt    # 人类可读的摘要报告
+    └── logs/                                # 详细的处理日志
+        ├── workflow_0001_case_XXXX.jsonl    # 每个病例的处理日志
+        └── batch_processing_YYYYMMDD_HHMMSS.log  # 批处理系统日志
+    ├── main.py                         # 科研模式主函数
+    ├── config.py                       # 模型配置文件
 │
 ├── service/               # 工程模式（规划中）
-│   ├── main.py            # FastAPI应用入口
-│   ├── api/               # RESTful接口
+│   ├── main.py            # 工程模式后端函数
+│   ├── API/               # RESTful接口
 │   ├── core/              # 核心业务逻辑
 │   ├── models/            # 数据模型
 │   └── persistence/       # 数据持久化
+│   └── Frontend/          # 前端界面
 ```
 
 ## 快速开始
 
 ### 环境要求
 
-- Python 3.12
+- Python 3.13
 - 支持的LLM后端：DeepSeek / 阿里百炼
 
 ### 安装依赖
@@ -69,6 +82,25 @@ MedSynthAI/
 # 使用uv包管理器
 uv sync
 ```
+### 安装依赖
+#### 使用conda创建环境
+    conda create -n chy python=3.12
+    conda activate chy
+
+#### 安装依赖
+    pip install -r requirements.txt
+
+### 配置环境变量
+#### 复制环境配置示例
+    cp .env.example .env
+
+#### 编辑 .env 文件，填入您DeepSeek API 配置
+    nano .env
+
+## 运行系统
+### 科研模式
+
+### 工程模式
 
 ## 开发规范
 
@@ -76,9 +108,61 @@ uv sync
 
 代码提交遵循Conventional Commits规范，使用feat、fix、docs、refactor等前缀清晰标识变更类型。所有提交信息应简洁专业，不包含AI工具署名或生成标识。
 
+## 贡献指南
+
+### Pull Request 规范
+
+为了保证代码质量和审查效率，请遵循以下 PR 提交规范：
+
+**代码变更限制**：
+- 单次 PR 修改代码行数不超过 **300 行**
+- 修改文件数量建议不超过 **5 个文件**
+- PR 内部的 commit 数量应少于 **3 个**
+- 一个 PR 只专注于 **一个功能** 或修复
+
+**拆分建议**：
+如果你的改动较大，请按照功能逻辑进行拆分，例如：
+- PR #1: 添加 guidance 并修改 workflow
+- PR #2: 添加 API 接口
+- PR #3: 文档更新
+
+### 内容规范
+
+**禁止提交的内容**：
+- ❌ 个人笔记和任务规划文件
+- ❌ 本地配置文件（如 `.vscode/`, `.idea/`）
+- ❌ 临时测试文件
+- ❌ 个人待办事项（TODO lists）
+- ❌ 学习笔记或个人总结
+
+**应该提交的内容**：
+- ✅ 功能代码和相应的单元测试
+- ✅ 必要的文档更新
+- ✅ 配置文件的示例模板（如 `config.example.yaml`）
+- ✅ 项目相关的通用文档
+
+### 提交前检查清单
+
+在提交 PR 之前，请确认：
+
+1. 代码变更量符合规范（<300 行，<5 个文件）
+2. Commit 信息遵循 Conventional Commits 规范
+3. 代码包含完整的类型注解和中文 docstring
+4. 已移除所有个人笔记和临时文件
+5. PR 描述清晰说明了改动的目的和实现方式
+6. 代码已在本地测试通过
+7. 确保.env 文件不在提交范围内
+
 ## 项目状态
 
-当前项目处于活跃开发阶段，核心Agent系统和基础工作流已经实现。正在进行的重构工作包括将现有代码整合到双模式架构中，实现科研模式的批量评估能力，以及开发工程模式的实时交互服务。
+### 当前状态（2025年11月）：
+
+1. ✅ 科研模式已完全实现：包括批量数据集处理、多线程并行执行、详细日志记录和评估报告生成
+2. ✅ 核心Agent系统已完成：8个专业化Agent协同工作
+3. ✅ 工作流系统已实现：支持完整的医疗问诊流程模拟
+4. ✅ 测试框架已建立：覆盖主要功能模块的单元测试
+5. ✅ 配置管理已完善：支持环境变量和多种配置选项
+6. ❌ 工程模式尚未开发：实时交互服务API仍在规划阶段
 
 ## 重构计划
 
@@ -89,8 +173,8 @@ uv sync
 - **核心框架**: Agno框架 (agno)
 - **数据验证**: Pydantic v2
 - **LLM接口**: 支持DeepSeek、阿里百炼
-- **Web框架**: FastAPI (工程模式)
-- **数据存储**: SQLite (工程模式)
+- **Web框架**: FastAPI（计划用于工程模式）
+- **数据存储**: SQLite（计划用于工程模式）
 - **依赖管理**: uv
 
 ## 许可证
