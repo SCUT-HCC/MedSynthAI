@@ -2,8 +2,8 @@ import time
 import sys
 import os
 
-# 设置项目根目录
-PROJECT_ROOT = "/home/pci/nas/AI_Large_Model_Team/chy/project/MedSynthAI_JIB_AAMAS/MedSynthAI"
+#设置动态项目目录
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 

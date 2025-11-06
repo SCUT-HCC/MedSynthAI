@@ -21,12 +21,11 @@ from workflow import MedicalWorkflow
 from config import LLM_CONFIG
 
 # 设置项目根目录
-PROJECT_ROOT = "/home/pci/nas/AI_Large_Model_Team/chy/project/MedSynthAI_JIB_AAMAS/MedSynthAI"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from guidance.loader import GuidanceLoader
-
 
 class BatchProcessor:
     """批处理管理器，负责协调多线程执行和状态管理"""

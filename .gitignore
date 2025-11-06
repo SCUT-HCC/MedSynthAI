@@ -11,12 +11,13 @@ wheels/
 
 # 忽略 results 目录
 results/
-results_11_14/
-results_11_15testneike/
-
+Docx/
+API/
+tests/
+research/visualizations
 # 其他文件
 .serena
 CLAUDE.md
 
 .env
-research/config.py
+

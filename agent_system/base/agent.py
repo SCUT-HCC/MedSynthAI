@@ -2,6 +2,8 @@ import hashlib
 import asyncio
 import concurrent.futures
 import json
+import os
+import sys
 from typing import Type, Dict, List, Optional, Union, Any, Set
 
 from agno.agent import Agent, RunResponse
@@ -17,6 +19,10 @@ except ImportError:
     OLLAMA_AVAILABLE = False
 
 from agent_system.base.response_model import BaseResponseModel
+#设置动态项目目录
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 from config import LLM_CONFIG
 
 class BaseAgent:
