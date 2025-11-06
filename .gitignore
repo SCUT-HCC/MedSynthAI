@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+.gitignore
 
 # 忽略 results 目录
 results/
