@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+from typing import Dict, Any, List, Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -8,11 +9,12 @@ logger = logging.getLogger(__name__)
 class GuidanceLoader:
     def __init__(self, 
                  department_guidance: str = "",
-                 use_dynamic_guidance: bool =False, 
-                 use_department_comparison: bool=False,
+                 use_dynamic_guidance: bool = False,  # 修复：改为 False
+                 use_department_comparison: bool = False,  # 修复：改为 False
                  department_guidance_file: str = "",
                  comparison_rules_file: str = ""
                 ) -> None:
+        """初始化指导规则加载器"""
         self.use_dynamic_guidance = use_dynamic_guidance
         self.use_department_comparison = use_department_comparison
         self.department_guidance_file = department_guidance_file
@@ -21,7 +23,8 @@ class GuidanceLoader:
         self.current_guidance = department_guidance
         self.comparison_rules = self._load_comparison_rules() if self.use_department_comparison else {}
 
-    def _load_comparison_rules(self):
+    def _load_comparison_rules(self) -> Dict[str, Any]:
+        """加载科室对比规则"""
         try:
             if os.path.exists(self.comparison_rules_file):
                 with open(self.comparison_rules_file, 'r', encoding='utf-8') as f:
@@ -34,50 +37,48 @@ class GuidanceLoader:
             return {}
     
     def load_inquiry_guidance(self, department: str) -> str:
-        """
-        加载科室特定的询问指导
-        """
+        """加载科室特定的询问指导"""
         try:
-            # 使用实例的 department_guidance_file 属性
             guidance_file = self.department_guidance_file
             
-            # 检查指导文件是否存在
             if not os.path.exists(guidance_file):
-                print(f"⚠️ 指导文件不存在: {guidance_file}")
+                logger.warning(f"⚠️ 指导文件不存在: {guidance_file}")
                 return ""
             
-            # 读取指导文件
             with open(guidance_file, 'r', encoding='utf-8') as f:
                 guidance_data = json.load(f)
             
-            # 检查是否存在指定科室的指导
             if department not in guidance_data:
                 if "其他" in guidance_data:
-                    print(f"⚠️ 未找到 '{department}' 科室的特定询问指导，使用通用指导")
+                    logger.warning(f"⚠️ 未找到 '{department}' 科室的特定询问指导，使用通用指导")
                     department = "其他"
                 else:
-                    print(f"⚠️ 未找到 '{department}' 科室的询问指导，也没有通用指导")
+                    logger.warning(f"⚠️ 未找到 '{department}' 科室的询问指导，也没有通用指导")
                     return ""
             
-            # 拼接指导内容
             guidance_list = guidance_data[department]
             guidance_text = "\n".join([f"- {item}" for item in guidance_list])
             return guidance_text
         
         except Exception as e:
-            print(f"❌ 加载询问指导时出错: {e}")
+            logger.error(f"❌ 加载询问指导时出错: {e}")
             return ""
-            
-     # 公共方法接口
+    
+    # 添加公共方法接口（重要！）
     def get_comparison_guidance(self, dept1: str, dept2: str) -> str:
         """公共方法：获取两个科室的对比鉴别指导"""
         return self._get_comparison_guidance(dept1, dept2)
     
-    def update_guidance_for_triager(self, predicted_department: str) -> str:
-        """公共方法：动态更新询问指导"""
+    def update_guidance_for_Triager(self, predicted_department: str) -> str:
+        """公共方法：动态更新询问指导（注意大小写！）"""
         return self._update_guidance_for_Triager(predicted_department)
     
-    # 私有方法实现（保持向后兼容）        
+    # 如果需要小写版本，也可以添加
+    def update_guidance_for_triager(self, predicted_department: str) -> str:
+        """公共方法：动态更新询问指导（小写版本）"""
+        return self._update_guidance_for_Triager(predicted_department)
+    
+    # 私有方法实现        
     def _get_comparison_guidance(self, dept1: str, dept2: str) -> str:
         """获取两个科室的对比鉴别指导"""
         if not self.comparison_rules:
@@ -135,7 +136,7 @@ class GuidanceLoader:
         """动态更新询问指导。如果禁用动态指导，则返回当前的指导。"""
         # 修复：如果禁用了动态指导，则直接返回当前已有的指导，不进行任何更新
         if not self.use_dynamic_guidance:
-            return self.current_guidance  
+            return self.department_guidance  
         
         first_department = predicted_department.split('-')[0] if '-' in predicted_department else predicted_department
         new_guidance = self.load_inquiry_guidance(first_department)
