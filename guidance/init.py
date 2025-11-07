@@ -7,7 +7,5 @@
 from .loader import GuidanceLoader, get_comparison_guidance, update_guidance_for_triager
 
 __all__ = [
-    "GuidanceLoader",
-    "get_comparison_guidance",
-    "update_guidance_for_triager"
+    "GuidanceLoader"
 ]

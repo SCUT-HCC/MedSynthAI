@@ -83,12 +83,12 @@ MedSynthAI/
 uv sync
 ```
 
-#### 使用conda创建环境
-    conda create -n chy python=3.12
-    conda activate chy
-
-#### 安装库
-    pip install -r requirements.txt
+#### 使用Conda安装
+```bash
+conda create -n chy python=3.12
+conda activate chy
+pip install -r requirements.txt
+```
 
 ### 配置环境变量
 #### 复制环境配置示例
