@@ -10,9 +10,10 @@ class MedicalWorkflow:
     负责协调整个30步问诊过程的执行
     """
     
-    def __init__(self, case_data: Dict[str, Any], model_type: str = "gpt-oss:latest", 
+    def __init__(self, case_data: Dict[str, Any], model_type: str = "deepseek", 
                  llm_config: Optional[Dict] = None, max_steps: int = 30, log_dir: str = "logs",
-                 case_index: Optional[int] = None, controller_mode: str = "normal"):
+                 case_index: Optional[int] = None, controller_mode: str = "normal",
+                 guidance_loader: Optional = None,department_guidance: str = "",):
         """
         初始化医疗问诊工作流
         
@@ -24,6 +25,8 @@ class MedicalWorkflow:
             log_dir: 日志目录，默认为"logs"
             case_index: 病例序号，用于日志文件命名
             controller_mode: 任务控制器模式，'normal'为智能模式，'sequence'为顺序模式，'score_driven'为分数驱动模式
+            guidance_loader: GuidanceLoader实例，用于加载动态指导内容
+            department_guidance: 科室指导内容，默认为空字符串(如果在初始化时传入了固定的科室指导（例如通过 --department_filter 参数指定），current_guidance 会被设置为该固定指导内容。如果没有传入固定指导，current_guidance 初始值为空字符串 "")
         """
         self.case_data = case_data
         self.model_type = model_type
@@ -32,26 +35,34 @@ class MedicalWorkflow:
         
         # 初始化核心组件
         self.task_manager = TaskManager()
-        self.step_executor = StepExecutor(model_type=model_type, llm_config=self.llm_config, controller_mode=controller_mode)
+        self.step_executor = StepExecutor(
+            model_type=model_type, 
+            llm_config=self.llm_config, 
+            controller_mode=controller_mode,
+            guidance_loader=guidance_loader,  # 将 GuidanceLoader 传递给 StepExecutor
+        )
         self.logger = WorkflowLogger(case_data=case_data, log_dir=log_dir, case_index=case_index)
         
         # 重置历史评分，确保新的工作流从零开始
-        StepExecutor.reset_historical_scores()
+        StepExecutor.reset_historical_scores() #StepExecutor单步执行器
         
         # 初始化工作流状态
         self.current_step = 0
-        self.conversation_history = ""
+        self.conversation_history = ""   # 完整对话历史
         self.current_hpi = ""
         self.current_ph = ""
         self.current_chief_complaint = ""
         self.current_triage = {
             "primary_department": "",
             "secondary_department": "",
-            "triage_reasoning": ""
+            "triage_reasoning": "",
+            "candidate_primary_department": "",
+            "candidate_secondary_department": "",
+
         }
         self.workflow_completed = False
         self.workflow_success = False
-    
+        self.current_guidance = department_guidance
     def run(self) -> str:
         """
         执行完整的医疗问诊工作流
@@ -73,12 +84,12 @@ class MedicalWorkflow:
                     self.workflow_success = True
                     break
                 
-                # 执行当前step
+                # 执行单个step
                 if not self._execute_single_step(step):
                     print(f"Step {step} 执行失败，工作流终止")
                     break
                 
-                # 显示进度
+                # 打印step进度信息
                 self._print_step_progress(step)
             
             # 如果达到最大步数但任务未完成
@@ -140,8 +151,12 @@ class MedicalWorkflow:
                 previous_hpi=self.current_hpi,
                 previous_ph=self.current_ph,
                 previous_chief_complaint=self.current_chief_complaint,
+                previous_department=f"{self.current_triage.get('primary_department', '')}-{self.current_triage.get('secondary_department', '')}",
+                previous_candidate_department=f"{self.current_triage.get('candidate_primary_department', '')}-{self.current_triage.get('candidate_secondary_department', '')}",
+                previous_triage_reasoning=self.current_triage.get("triage_reasoning", ""),
+                current_guidance=self.current_guidance,
                 is_first_step=is_first_step,
-                doctor_question=doctor_question
+                doctor_question=doctor_question,
             )
             
             # 检查执行结果
@@ -181,7 +196,7 @@ class MedicalWorkflow:
         self.current_chief_complaint = step_result["updated_chief_complaint"]
         self.current_triage = step_result["triage_result"]
         self._last_doctor_question = step_result["doctor_question"]
-    
+        self.current_guidance = step_result.get("new_guidance", self.current_guidance)
     def _print_step_progress(self, step_num: int):
         """
         打印step进度信息
@@ -196,8 +211,9 @@ class MedicalWorkflow:
         print(f"当前阶段: {current_phase.value}")
         
         # 显示分诊信息
-        if self.current_triage and self.current_triage.get("primary_department"):
+        if self.current_triage and self.current_triage.get("primary_department") and self.current_triage.get("candidate_secondary_department"):
             print(f"科室分诊: {self.current_triage['primary_department']} → {self.current_triage['secondary_department']}")
+            print(f"候选科室分诊: {self.current_triage['candidate_primary_department']} → {self.current_triage['candidate_secondary_department']}")
             print(f"分诊理由: {self.current_triage['triage_reasoning'][:50]}...")
         
         # 显示各阶段完成情况

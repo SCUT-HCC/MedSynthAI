@@ -1,13 +1,281 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# ==================================================
+# MedSynthAI 项目 .gitignore 配置
+# ==================================================
 
-# Virtual environments
-.venv
+# 环境变量文件 - 包含敏感信息，不应提交到版本控制
+.env
+.env.local
+.env.*.local
 
+# ==================================================
+# 项目特定目录 - 根据您的要求忽略
+# ==================================================
+
+# 结果输出目录
+results/
+
+# 测试相关（如果您不想提交测试文件）
+tests/
+
+# 文档目录
+Docx/
+
+# 可视化文件
+research/visualizations/
+
+# 其他项目特定文件
 .serena
 CLAUDE.md
+
+# ==================================================
+# Python 相关文件
+# ==================================================
+
+# 字节码文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C 扩展
+*.so
+
+# 分发 / 打包
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# 单元测试 / 覆盖率报告
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# ==================================================
+# 虚拟环境
+# ==================================================
+
+# venv
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# conda
+.conda/
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# ==================================================
+# IDE 和编辑器
+# ==================================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ==================================================
+# 操作系统相关
+# ==================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+
+# ==================================================
+# 日志和临时文件
+# ==================================================
+
+# 日志文件
+*.log
+logs/
+log/
+
+# 临时文件
+tmp/
+temp/
+.tmp/
+.temp/
+*.tmp
+*.temp
+
+# 备份文件
+*.bak
+*.backup
+*.old
+
+# ==================================================
+# 数据和缓存
+# ==================================================
+
+# 数据文件（如果不需要版本控制）
+data/
+datasets/
+*.csv
+*.json
+*.xlsx
+*.xls
+*.db
+*.sqlite
+*.sqlite3
+
+# 缓存目录
+cache/
+.cache/
+*.cache
+
+# 模型文件（通常很大，不适合版本控制）
+models/
+*.pkl
+*.pickle
+*.joblib
+*.model
+*.h5
+*.ckpt
+*.pth
+*.pt
+
+# ==================================================
+# 网络和安全
+# ==================================================
+
+# SSL 证书
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# 密钥文件
+secrets/
+secret/
+*.secret
+
+# ==================================================
+# 文档生成
+# ==================================================
+
+# Sphinx documentation
+docs/_build/
+docs/build/
+
+# MkDocs
+site/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# ==================================================
+# 其他工具
+# ==================================================
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# Node.js (如果项目中有前端部分)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker
+Dockerfile.local
+docker-compose.override.yml
+.dockerignore.local
+API/database/db.py
+API/database_model/AudioDatabase.py

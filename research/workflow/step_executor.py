@@ -1,4 +1,12 @@
 import time
+import sys
+import os
+
+# 设置动态项目目录
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from typing import Dict, Any, List, Optional
 from agent_system.recipient import RecipientAgent
 from agent_system.triager import TriageAgent
@@ -10,6 +18,7 @@ from agent_system.virtual_patient import VirtualPatientAgent
 from agent_system.evaluator import Evaluator
 from .task_manager import TaskManager, TaskPhase
 from .workflow_logger import WorkflowLogger
+
 
 class StepExecutor:
     """
@@ -41,7 +50,19 @@ class StepExecutor:
             "chief_complaint_similarity": 0.0
         }
     
-    def __init__(self, model_type: str = "gpt-oss:latest", llm_config: dict = None, controller_mode: str = "normal"):
+    @staticmethod
+    def extract_secondary(dept: str) -> str:
+        return dept.split('-')[1] if '-' in dept else dept
+
+    @staticmethod
+    def extract_primary(dept: str) -> str:
+        return dept.split('-')[0] if '-' in dept else dept
+    
+    def __init__(self, model_type: str = "deepseek", 
+                llm_config: dict = None, 
+                 controller_mode: str = "normal", 
+                 guidance_loader: Optional = None,
+                ):
         """
         初始化step执行器
         
@@ -49,13 +70,14 @@ class StepExecutor:
             model_type: 使用的语言模型类型（除Evaluator外的所有agent使用）
             llm_config: 语言模型配置
             controller_mode: 任务控制器模式，'normal'为智能模式，'sequence'为顺序模式，'score_driven'为分数驱动模式
-        
-        Note:
-            Evaluator agent 固定使用 gpt-oss:latest 模型，不受 model_type 参数影响
+            guidance_loader: GuidanceLoader 对象，用于加载动态指导内容
+            department_inquiry_guidance: 科室询问指导文本，传递给Inquirer
         """
         self.model_type = model_type
         self.llm_config = llm_config or {}
         self.controller_mode = controller_mode
+        # 定义GuidanceLoader
+        self.guidance_loader = guidance_loader
         
         # 初始化所有agent
         self.recipient = RecipientAgent(model_type=model_type, llm_config=self.llm_config)
@@ -72,9 +94,8 @@ class StepExecutor:
         )
         self.prompter = Prompter(model_type=model_type, llm_config=self.llm_config)
         self.virtual_patient = VirtualPatientAgent(model_type=model_type, llm_config=self.llm_config)
-        # Evaluator 固定使用 gpt-oss:latest 模型
-        self.evaluator = Evaluator(model_type="gpt-oss:latest", llm_config=self.llm_config)
-    
+        self.evaluator = Evaluator(model_type="deepseek", llm_config=self.llm_config)
+
     def execute_step(self, 
                     step_num: int,
                     case_data: Dict[str, Any],
@@ -84,6 +105,10 @@ class StepExecutor:
                     previous_hpi: str = "",
                     previous_ph: str = "",
                     previous_chief_complaint: str = "",
+                    previous_department=None,
+                    previous_candidate_department=None,
+                    previous_triage_reasoning: str = "",
+                    current_guidance: str = "",
                     is_first_step: bool = False,
                     doctor_question: str = "") -> Dict[str, Any]:
         """
@@ -98,6 +123,10 @@ class StepExecutor:
             previous_hpi: 上轮现病史
             previous_ph: 上轮既往史
             previous_chief_complaint: 上轮主诉
+            previous_department: 上轮分诊主要科室
+            previous_candidate_department: 上轮分诊候选科室
+            previous_triage_reasoning: 上轮分诊推理
+            current_guidance: 当前指导文本
             is_first_step: 是否为第一个step
             doctor_question: 医生问题（非首轮时）
             
@@ -114,7 +143,9 @@ class StepExecutor:
             "triage_result": {
                 "primary_department": "",
                 "secondary_department": "",
-                "triage_reasoning": ""
+                "triage_reasoning": "",
+                "candidate_primary_department": "",
+                "candidate_secondary_department": ""
             },
             "doctor_question": "",
             "conversation_history": conversation_history,
@@ -155,22 +186,36 @@ class StepExecutor:
             if current_phase == TaskPhase.TRIAGE:
                 # 当前处于分诊阶段
                 triage_result = self._execute_triager(
-                    step_num, logger, recipient_result
+                    step_num, logger, recipient_result, previous_department, previous_candidate_department, current_guidance
                 )
                 step_result["triage_result"] = {
                     "primary_department": triage_result.primary_department,
                     "secondary_department": triage_result.secondary_department,
-                    "triage_reasoning": triage_result.triage_reasoning
+                    "triage_reasoning": triage_result.triage_reasoning,
+                    "candidate_primary_department": triage_result.candidate_primary_department,
+                    "candidate_secondary_department": triage_result.candidate_secondary_department
                 }
+
+                department = f"{triage_result.primary_department}-{triage_result.secondary_department}"
+                # 根据预测科室动态更新指导
+                new_guidance = self.guidance_loader.update_guidance_for_Triager(department)
+
             else:
                 # 分诊已完成或已超过分诊阶段，使用已有的分诊结果
-                existing_triage = step_result.get("triage_result", {})
+                primary_department = self.extract_primary(previous_department)
+                secondary_department = self.extract_secondary(previous_department)
+                candidate_primary_department = self.extract_primary(previous_candidate_department)
+                candidate_secondary_department = self.extract_secondary(previous_candidate_department)
                 step_result["triage_result"] = {
-                    "primary_department": existing_triage.get("primary_department", "未知"),
-                    "secondary_department": existing_triage.get("secondary_department", "未知"),
-                    "triage_reasoning": existing_triage.get("triage_reasoning", "分诊已完成")
+                    "primary_department": primary_department,   
+                    "secondary_department": secondary_department,
+                    "triage_reasoning": previous_triage_reasoning,
+                    "candidate_primary_department": candidate_primary_department,
+                    "candidate_secondary_department": candidate_secondary_department
                 }
-            
+                # 使用已有分诊结果更新指导
+                new_guidance = current_guidance
+
             # Step 4: 使用Monitor评估任务完成度
             monitor_results = self._execute_monitor_by_phase(
                 step_num, logger, task_manager, recipient_result, step_result.get("triage_result", {})
@@ -191,8 +236,9 @@ class StepExecutor:
             )
             
             # Step 8: 使用Inquirer生成医生问题
+            
             doctor_question = self._execute_inquirer(
-                step_num, logger, recipient_result, prompter_result
+                step_num, logger, recipient_result, prompter_result, new_guidance
             )
             step_result["doctor_question"] = doctor_question
             
@@ -204,6 +250,7 @@ class StepExecutor:
             
             # Step 10: 获取任务完成情况摘要
             step_result["task_completion_summary"] = task_manager.get_completion_summary()
+            step_result["new_guidance"] = new_guidance
             
             step_result["success"] = True
             
@@ -287,14 +334,29 @@ class StepExecutor:
         return result
     
     def _execute_triager(self, step_num: int, logger: WorkflowLogger, 
-                        recipient_result):
+                        recipient_result, previous_department: str, 
+                        previous_candidate_department: str, current_guidance: str):
         """执行Triage agent进行科室分诊"""
         start_time = time.time()
-        
+        # 初始化对比指导和合并指导
+        comparison_guidance = ""
+        combined_guidance = current_guidance
+
+        # 如果存在上一轮的分诊结果，并且有主要科室和候选科室，则生成对比指导
+        if previous_department and previous_candidate_department:
+            comparison_guidance = self.guidance_loader.get_comparison_guidance(previous_department, previous_candidate_department)
+            combined_guidance = current_guidance
+            if comparison_guidance:
+                combined_guidance += f"\n\n【科室对比鉴别指导】\n{comparison_guidance}"
+        else:
+            combined_guidance += f"\n\n【科室对比鉴别指导】\n无对比建议"
+
+
         input_data = {
             "chief_complaint": recipient_result.chief_complaint,
             "hpi_content": recipient_result.updated_HPI,
-            "ph_content": recipient_result.updated_PH
+            "ph_content": recipient_result.updated_PH,
+            "current_guidance": combined_guidance,
         }
         
         result = self.triager.run(**input_data)
@@ -303,9 +365,13 @@ class StepExecutor:
         output_data = {
             "primary_department": result.primary_department,
             "secondary_department": result.secondary_department,
-            "triage_reasoning": result.triage_reasoning
+            "triage_reasoning": result.triage_reasoning,
+            "candidate_primary_department": result.candidate_primary_department,
+            "candidate_secondary_department": result.candidate_secondary_department,
         }
-        
+        #在日志中加入对比指导信息
+        log_input_data = input_data.copy()
+        log_input_data["used_comparison_guidance"] = bool(comparison_guidance)
         logger.log_agent_execution(step_num, "triager", input_data, output_data, execution_time)
         
         return result
@@ -463,17 +529,19 @@ class StepExecutor:
         return result
     
     def _execute_inquirer(self, step_num: int, logger: WorkflowLogger, 
-                         recipient_result, prompter_result) -> str:
+                         recipient_result, prompter_result,
+                         new_guidance) -> str:
         """执行Inquirer agent"""
         start_time = time.time()
-        
+
         try:
             # 使用Prompter生成的描述和指令初始化Inquirer
             inquirer = Inquirer(
                 description=prompter_result.description,
                 instructions=prompter_result.instructions,
                 model_type=self.model_type,
-                llm_config=self.llm_config
+                llm_config=self.llm_config,
+                department_inquiry_guidance=new_guidance,
             )
             
             input_data = {
