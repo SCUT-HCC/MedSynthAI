@@ -4,6 +4,8 @@ import concurrent.futures
 import json
 import os
 import sys
+import re
+import logging
 from typing import Type, Dict, List, Optional, Union, Any, Set
 
 from agno.agent import Agent, RunResponse
@@ -170,8 +172,14 @@ class BaseAgent:
         llm_keys = self.llm_config.keys()
         
         if model_type not in llm_keys:
-            # 使用 aliyun 作为回退，并将 model_type 设置为 id
-            model_config = self.llm_config["aliyun"].copy()
+            # 如果模型类型不存在，使用配置中的第一个模型作为回退
+            if not self.llm_config:
+                raise ValueError("LLM_CONFIG 为空，无法获取任何模型配置。")
+            
+            fallback_key = next(iter(self.llm_config))
+            print(f"警告: 模型类型 '{model_type}' 未在配置中找到。回退到使用 '{fallback_key}' 的配置。")
+            
+            model_config = self.llm_config[fallback_key].copy()
             model_config["params"]["id"] = model_type
             return model_config
         else:
@@ -336,8 +344,8 @@ class BaseAgent:
             
         # 清理响应字符串
         cleaned_str = response_str.strip()
-        print(f"调试: 原始响应 = {repr(response_str[:200])}...")
-        
+        logging.debug(f"调试: 原始响应 = {repr(response_str[:200])}...")
+
         # 移除可能的代码块标记
         if cleaned_str.startswith('```json'):
             cleaned_str = cleaned_str[7:]
@@ -345,24 +353,23 @@ class BaseAgent:
             cleaned_str = cleaned_str[:-3]
         
         # 尝试提取JSON内容 - 支持嵌套JSON结构
-        import re
         
         # 首先尝试查找完整的JSON对象（考虑嵌套结构）
         json_str = self._extract_complete_json(cleaned_str)
         if json_str:
-            print(f"调试: 提取的完整JSON = {repr(json_str[:200])}...")
+            logging.debug(f"调试: 提取的完整JSON = {repr(json_str[:200])}...")
         else:
             json_str = cleaned_str.strip()
             print(f"调试: 未找到JSON结构，使用原始内容 = {repr(json_str[:200])}...")
             
         try:
             data_dict = json.loads(json_str)
-            print(f"调试: 解析成功的字典 = {data_dict}")
+            logging.debug(f"调试: 解析成功的字典 = {data_dict}")
             
             if self.response_model:
                 try:
                     result = self.response_model(**data_dict)
-                    print(f"调试: 成功创建模型实例 = {result}")
+                    logging.debug(f"成功创建模型实例 = {result}")
                     return result
                 except Exception as e:
                     print(f"无法从字典创建模型实例: {e}")

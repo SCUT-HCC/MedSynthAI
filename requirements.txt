@@ -353,6 +353,7 @@ watchfiles==1.0.5
     # via uvicorn
 websocket-client==1.8.0
     # via kubernetes
+// ...existing code...
 websockets==15.0
     # via
     #   -r requirements.in
