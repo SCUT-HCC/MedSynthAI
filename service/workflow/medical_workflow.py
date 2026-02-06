@@ -1,6 +1,5 @@
 from typing import Dict, Any, Optional
 import time
-import logging
 from .task_manager import TaskManager, TaskPhase
 from .step_executor import StepExecutor
 from .workflow_logger import WorkflowLogger
@@ -11,25 +10,22 @@ class MedicalWorkflow:
     负责协调整个30步问诊过程的执行
     """
     
-    def __init__(self, case_data: Dict[str, Any], model_type: str = "deepseek", 
+    def __init__(self,  model_type: str = "deepseek", 
                  llm_config: Optional[Dict] = None, max_steps: int = 30, log_dir: str = "logs",
-                 case_index: Optional[int] = None, controller_mode: str = "normal",
-                 guidance_loader: Optional = None,department_guidance: str = "",):
+                 controller_mode: str = "normal",
+                 guidance_loader: Optional[Any] = None,department_guidance: str = "",):
         """
         初始化医疗问诊工作流
         
         Args:
-            case_data: 病例数据，包含病案介绍等信息
             model_type: 使用的语言模型类型，默认为"gpt-oss:latest"
             llm_config: 语言模型配置，默认为None
             max_steps: 最大执行步数，默认为30
             log_dir: 日志目录，默认为"logs"
-            case_index: 病例序号，用于日志文件命名
             controller_mode: 任务控制器模式，'normal'为智能模式，'sequence'为顺序模式，'score_driven'为分数驱动模式
             guidance_loader: GuidanceLoader实例，用于加载动态指导内容
             department_guidance: 科室指导内容，默认为空字符串(如果在初始化时传入了固定的科室指导（例如通过 --department_filter 参数指定），current_guidance 会被设置为该固定指导内容。如果没有传入固定指导，current_guidance 初始值为空字符串 "")
         """
-        self.case_data = case_data
         self.model_type = model_type
         self.llm_config = llm_config or {}
         self.max_steps = max_steps
@@ -42,7 +38,6 @@ class MedicalWorkflow:
             controller_mode=controller_mode,
             guidance_loader=guidance_loader,  # 将 GuidanceLoader 传递给 StepExecutor
         )
-        self.logger = WorkflowLogger(case_data=case_data, log_dir=log_dir, case_index=case_index)
         
         # 重置历史评分，确保新的工作流从零开始
         StepExecutor.reset_historical_scores() #StepExecutor单步执行器
@@ -65,14 +60,6 @@ class MedicalWorkflow:
         self.workflow_success = False
         self.current_guidance = department_guidance
     def run(self) -> str:
-        """
-        执行完整的医疗问诊工作流
-        
-        Returns:
-            str: 日志文件路径
-        """
-        print(f"开始执行医疗问诊工作流，病例：{self.case_data.get('病案介绍', {}).get('主诉', '未知病例')}")
-        
         try:
             # 执行工作流的主循环
             for step in range(1, self.max_steps + 1):
@@ -198,7 +185,6 @@ class MedicalWorkflow:
         self.current_triage = step_result["triage_result"]
         self._last_doctor_question = step_result["doctor_question"]
         self.current_guidance = step_result.get("new_guidance", self.current_guidance)
-        self._last_patient_response = step_result["patient_response"]
     def _print_step_progress(self, step_num: int):
         """
         打印step进度信息
@@ -209,28 +195,24 @@ class MedicalWorkflow:
         current_phase = self.task_manager.get_current_phase()
         completion_summary = self.task_manager.get_completion_summary()
         
-        logging.info(f"\n=== Round {step_num} 完成 ===")
-        logging.info(f"当前阶段: {current_phase.value}")
+        print(f"\n=== Step {step_num} 完成 ===")
+        print(f"当前阶段: {current_phase.value}")
         
         # 显示分诊信息
         if self.current_triage and self.current_triage.get("primary_department") and self.current_triage.get("candidate_secondary_department"):
-            logging.info(f"科室分诊: {self.current_triage['primary_department']} → {self.current_triage['secondary_department']}")
-            logging.info(f"候选科室分诊: {self.current_triage['candidate_primary_department']} → {self.current_triage['candidate_secondary_department']}")
-            logging.info(f"分诊理由: {self.current_triage['triage_reasoning'][:50]}...")
+            print(f"科室分诊: {self.current_triage['primary_department']} → {self.current_triage['secondary_department']}")
+            print(f"候选科室分诊: {self.current_triage['candidate_primary_department']} → {self.current_triage['candidate_secondary_department']}")
+            print(f"分诊理由: {self.current_triage['triage_reasoning'][:50]}...")
         
         # 显示各阶段完成情况
         for phase_name, phase_info in completion_summary["phases"].items():
             status = "✓" if phase_info["is_completed"] else "○"
-            logging.info(f"{status} {phase_name}: {phase_info['completed']}/{phase_info['total']} 任务完成 "
+            print(f"{status} {phase_name}: {phase_info['completed']}/{phase_info['total']} 任务完成 "
                   f"({phase_info['completion_rate']:.1%})")
         
-        logging.info(f"对话轮次: {step_num}")
-        logging.info(f"最新患者问题: {getattr(self, '_last_patient_response', '暂无')[:50]}...")
-        logging.info(f"最新医生问题: {getattr(self, '_last_doctor_question', '暂无')[:50]}...")
-        logging.info(f"当前主诉: {self.current_chief_complaint[:50]}...")
-        logging.info(f"当前HPI: {self.current_hpi[:50]}...")
-        logging.info(f"当前 PH: {self.current_ph[:50]}...")
-        logging.info("-" * 60)
+        print(f"对话轮次: {step_num}")
+        print(f"最新医生问题: {getattr(self, '_last_doctor_question', '暂无')[:50]}...")
+        print("-" * 60)
     
     def get_current_status(self) -> Dict[str, Any]:
         """

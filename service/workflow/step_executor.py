@@ -1,7 +1,6 @@
 import time
 import sys
 import os
-import logging
 
 # 设置动态项目目录
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,7 +18,6 @@ from agent_system.virtual_patient import VirtualPatientAgent
 from agent_system.evaluator import Evaluator
 from .task_manager import TaskManager, TaskPhase
 from .workflow_logger import WorkflowLogger
-
 
 class StepExecutor:
     """
@@ -62,7 +60,7 @@ class StepExecutor:
     def __init__(self, model_type: str = "deepseek", 
                 llm_config: dict = None, 
                  controller_mode: str = "normal", 
-                 guidance_loader: Optional = None,
+                 guidance_loader: Optional[Any] = None,
                 ):
         """
         初始化step执行器
@@ -99,7 +97,6 @@ class StepExecutor:
 
     def execute_step(self, 
                     step_num: int,
-                    case_data: Dict[str, Any],
                     task_manager: TaskManager,
                     logger: WorkflowLogger,
                     conversation_history: str = "",
@@ -111,13 +108,13 @@ class StepExecutor:
                     previous_triage_reasoning: str = "",
                     current_guidance: str = "",
                     is_first_step: bool = False,
+                    patient_response: Optional[str] = None,
                     doctor_question: str = "") -> Dict[str, Any]:
         """
         执行单个step的完整流程
         
         Args:
             step_num: step编号
-            case_data: 病例数据
             task_manager: 任务管理器
             logger: 日志记录器
             conversation_history: 对话历史
@@ -155,16 +152,11 @@ class StepExecutor:
         }
         
         try:
-            logging.info(f"--- 开始执行 Round {step_num} ---")
             # 更新任务管理器的当前步骤
             task_manager.current_step = step_num
             
             # Step 1: 获取患者回应
-            patient_response = self._get_patient_response(
-                step_num, case_data, logger, is_first_step, doctor_question
-            )
             step_result["patient_response"] = patient_response
-            logging.info(f"患者: {patient_response}")
             
             # 更新对话历史
             if is_first_step:
@@ -244,14 +236,12 @@ class StepExecutor:
                 step_num, logger, recipient_result, prompter_result, new_guidance
             )
             step_result["doctor_question"] = doctor_question
-            logging.info(f"医生: {doctor_question}")
             
             # Step 9: 使用Evaluator进行评分
             evaluator_result = self._execute_evaluator(
-                step_num, logger, case_data, step_result
+                step_num, logger,step_result
             )
             step_result["evaluator_result"] = evaluator_result
-            logging.info(f"评估结果: {evaluator_result}")
             
             # Step 10: 获取任务完成情况摘要
             step_result["task_completion_summary"] = task_manager.get_completion_summary()
@@ -262,55 +252,11 @@ class StepExecutor:
         except Exception as e:
             error_msg = f"Step {step_num} 执行失败: {str(e)}"
             step_result["errors"].append(error_msg)
-            logger.log_error(step_num, "step_execution_error", error_msg, {"case_data": case_data})
+            logger.log_error(step_num, "step_execution_error", error_msg,)
             print(error_msg)
         
         return step_result
     
-    def _get_patient_response(self, step_num: int, case_data: Dict[str, Any], 
-                             logger: WorkflowLogger, is_first_step: bool, 
-                             doctor_question: str = "") -> str:
-        """获取虚拟患者的回应"""
-        start_time = time.time()
-        
-        try:
-            # 构建虚拟患者输入
-            if is_first_step:
-                worker_inquiry = "您好，请问您哪里不舒服？"
-            else:
-                worker_inquiry = doctor_question
-            
-            # 调用虚拟患者agent
-            patient_result = self.virtual_patient.run(
-                worker_inquiry=worker_inquiry,
-                is_first_epoch=is_first_step,
-                patient_case=case_data
-            )
-            
-            execution_time = time.time() - start_time
-            patient_response = patient_result.current_chat
-            
-            # 记录日志
-            logger.log_agent_execution(
-                step_num, "virtual_patient",
-                {
-                    "worker_inquiry": worker_inquiry,
-                    "is_first_epoch": is_first_step,
-                    "case_data": case_data
-                },
-                {"patient_response": patient_response},
-                execution_time
-            )
-            
-            logger.log_patient_response(step_num, patient_response, is_first_step)
-            
-            return patient_response
-            
-        except Exception as e:
-            error_msg = f"虚拟患者执行失败: {str(e)}"
-            logger.log_error(step_num, "virtual_patient_error", error_msg)
-            # 返回默认回应
-            return "对不起，我不太清楚怎么描述，医生您看着办吧。"
     
     def _execute_recipient(self, step_num: int, logger: WorkflowLogger, 
                           conversation_history: str, previous_hpi: str, 
@@ -573,11 +519,11 @@ class StepExecutor:
             return "请您详细描述一下您的症状，包括什么时候开始的，有什么特点？"
 
     
-    def _execute_evaluator(self, step_num: int, logger: WorkflowLogger, 
-                          case_data: Dict[str, Any], step_result: Dict[str, Any]):
+    def _execute_evaluator(self, step_num: int, logger: WorkflowLogger,
+                           step_result: Dict[str, Any]):
         """执行Evaluator agent"""
         start_time = time.time()
-        
+
         try:
             # 准备评价器需要的数据格式，包含完整对话历史
             conversation_history = step_result.get("conversation_history", "")
@@ -588,13 +534,21 @@ class StepExecutor:
                 "PH": step_result.get("updated_ph", ""),
                 "chief_complaint": step_result.get("updated_chief_complaint", "")
             }
+
+            # 构建工程模式下的简化 patient_case（用于 evaluator）
+            patient_case = {
+                "病案介绍": {
+                    "主诉": step_result.get("updated_chief_complaint", ""),
+                    "现病史": step_result.get("updated_hpi", ""),
+                    "既往史": step_result.get("updated_ph", "")
+                }
+            }
             
             # 使用全局历史评分
             historical_scores = self._global_historical_scores
             
             # 调用评价器进行评价，传入完整对话历史和历史评分
             input_data = {
-                "patient_case": case_data,
                 "current_round": step_num,
                 "round_data": round_data,
                 "conversation_history": conversation_history,
@@ -651,7 +605,7 @@ class StepExecutor:
             
             # 调用支持多轮的评估方法
             result = self.evaluator.run(
-                patient_case=case_data,
+                patient_case=patient_case,
                 current_round=step_num,
                 all_rounds_data=all_rounds_data,
                 historical_scores=historical_scores

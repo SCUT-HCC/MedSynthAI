@@ -13,15 +13,33 @@
 
 # 结果输出目录
 results/
+results_11_30/
+results1201_sequence/
+research/Draw/Figures
+results_11_30/results_11_30_Agent_Driven/
+results0107/
+results_0107_normal_deepseek/
+# 画图目录
+research/Draw/clean_workflow_valid/cleaned_data
+research/Draw/figure
 
 # 测试相关（如果您不想提交测试文件）
-tests/
+tests/ 
+test_service/
+service_end/
 
 # 文档目录
 Docx/
 
 # 可视化文件
 research/visualizations/
+
+# 忽略原始的研究脚本，推荐使用 example 目录下的版本
+research/research.sh
+research/Draw/draw_all.sh
+
+# 前端
+Frontend/.next/
 
 # 其他项目特定文件
 .serena
@@ -47,7 +65,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/
 lib64/
 parts/
 sdist/

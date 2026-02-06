@@ -1,11 +1,8 @@
 import os
 from dotenv import load_dotenv
 
-# 项目根目录 {project_root}
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 # 从 .env 文件加载环境变量
-load_dotenv(os.path.join(BASE_DIR, '.env'))
+load_dotenv('.env')
 
 # 从环境变量中获取 API_KEY 和 BASE_URL
 API_KEY = os.getenv("API_KEY")
