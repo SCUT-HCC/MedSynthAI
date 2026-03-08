@@ -259,7 +259,7 @@ class BaseAgent:
         Raises:
             RuntimeError: 如果无法获得有效的结构化响应
         """
-        max_retries = 5
+        max_retries = 2  # 减少重试次数从5次到2次，提高响应速度
         
         for retry_count in range(max_retries):
             result = self._execute_parallel_structured_requests(prompt, **kwargs)

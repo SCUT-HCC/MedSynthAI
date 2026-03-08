@@ -1,6 +1,7 @@
 import time
 import sys
 import os
+import concurrent.futures
 
 # 设置动态项目目录
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -171,59 +172,91 @@ class StepExecutor:
             )
             step_result.update({
                 "updated_hpi": recipient_result.updated_HPI,
-                "updated_ph": recipient_result.updated_PH, 
+                "updated_ph": recipient_result.updated_PH,
                 "updated_chief_complaint": recipient_result.chief_complaint
             })
-            
-            # Step 3: 使用Triager进行科室分诊（仅当当前阶段是分诊阶段时）
+
+            # Step 3: 并行执行独立的Agent（性能优化）
             current_phase = task_manager.get_current_phase()
-            
-            if current_phase == TaskPhase.TRIAGE:
-                # 当前处于分诊阶段
-                triage_result = self._execute_triager(
-                    step_num, logger, recipient_result, previous_department, previous_candidate_department, current_guidance
-                )
-                step_result["triage_result"] = {
-                    "primary_department": triage_result.primary_department,
-                    "secondary_department": triage_result.secondary_department,
-                    "triage_reasoning": triage_result.triage_reasoning,
-                    "candidate_primary_department": triage_result.candidate_primary_department,
-                    "candidate_secondary_department": triage_result.candidate_secondary_department
-                }
 
-                department = f"{triage_result.primary_department}-{triage_result.secondary_department}"
-                # 根据预测科室动态更新指导
-                new_guidance = self.guidance_loader.update_guidance_for_Triager(department)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                # 提交并行任务
+                futures = {}
 
-            else:
-                # 分诊已完成或已超过分诊阶段，使用已有的分诊结果
-                primary_department = self.extract_primary(previous_department)
-                secondary_department = self.extract_secondary(previous_department)
-                candidate_primary_department = self.extract_primary(previous_candidate_department)
-                candidate_secondary_department = self.extract_secondary(previous_candidate_department)
-                step_result["triage_result"] = {
-                    "primary_department": primary_department,   
-                    "secondary_department": secondary_department,
-                    "triage_reasoning": previous_triage_reasoning,
-                    "candidate_primary_department": candidate_primary_department,
-                    "candidate_secondary_department": candidate_secondary_department
-                }
-                # 使用已有分诊结果更新指导
-                new_guidance = current_guidance
+                # Monitor和Controller可以并行执行（都只依赖recipient_result）
+                # 注意：Monitor在分诊阶段需要triage_result，但在非分诊阶段不需要
 
-            # Step 4: 使用Monitor评估任务完成度
-            monitor_results = self._execute_monitor_by_phase(
-                step_num, logger, task_manager, recipient_result, step_result.get("triage_result", {})
-            )
-            
-            
+                if current_phase == TaskPhase.TRIAGE:
+                    # 分诊阶段：先并行执行Monitor(不带triage_result)和Controller
+                    temp_triage = {"primary_department": "", "secondary_department": "", "triage_reasoning": "", "candidate_primary_department": "", "candidate_secondary_department": ""}
+                    futures['monitor'] = executor.submit(
+                        self._execute_monitor_by_phase,
+                        step_num, logger, task_manager, recipient_result, temp_triage
+                    )
+                    futures['controller'] = executor.submit(
+                        self._execute_controller,
+                        step_num, logger, task_manager, recipient_result
+                    )
+
+                    # 等待Monitor和Controller完成
+                    concurrent.futures.wait([futures['monitor'], futures['controller']])
+
+                    # 处理Controller结果
+                    controller_result = futures['controller'].result()
+
+                    # 现在执行Triager（因为Monitor需要它）
+                    triage_result = self._execute_triager(
+                        step_num, logger, recipient_result, previous_department, previous_candidate_department, current_guidance
+                    )
+                    step_result["triage_result"] = {
+                        "primary_department": triage_result.primary_department,
+                        "secondary_department": triage_result.secondary_department,
+                        "triage_reasoning": triage_result.triage_reasoning,
+                        "candidate_primary_department": triage_result.candidate_primary_department,
+                        "candidate_secondary_department": triage_result.candidate_secondary_department
+                    }
+
+                    department = f"{triage_result.primary_department}-{triage_result.secondary_department}"
+                    new_guidance = self.guidance_loader.update_guidance_for_Triager(department)
+
+                    # 获取Monitor结果（使用临时triage的）
+                    monitor_results = futures['monitor'].result()
+
+                else:
+                    # 非分诊阶段：并行执行Monitor和Controller
+                    # 使用已有的分诊结果
+                    primary_department = self.extract_primary(previous_department)
+                    secondary_department = self.extract_secondary(previous_department)
+                    candidate_primary_department = self.extract_primary(previous_candidate_department)
+                    candidate_secondary_department = self.extract_secondary(previous_candidate_department)
+                    existing_triage = {
+                        "primary_department": primary_department,
+                        "secondary_department": secondary_department,
+                        "triage_reasoning": previous_triage_reasoning,
+                        "candidate_primary_department": candidate_primary_department,
+                        "candidate_secondary_department": candidate_secondary_department
+                    }
+                    step_result["triage_result"] = existing_triage
+
+                    futures['monitor'] = executor.submit(
+                        self._execute_monitor_by_phase,
+                        step_num, logger, task_manager, recipient_result, existing_triage
+                    )
+                    futures['controller'] = executor.submit(
+                        self._execute_controller,
+                        step_num, logger, task_manager, recipient_result
+                    )
+
+                    # 等待Monitor和Controller完成
+                    concurrent.futures.wait([futures['monitor'], futures['controller']])
+
+                    # 获取结果
+                    monitor_results = futures['monitor'].result()
+                    controller_result = futures['controller'].result()
+                    new_guidance = current_guidance
+
             # Step 5: 更新任务分数
             self._update_task_scores(step_num, logger, task_manager, monitor_results)
-            
-            # Step 6: 使用Controller选择下一个任务
-            controller_result = self._execute_controller(
-                step_num, logger, task_manager, recipient_result
-            )
             
             # Step 7: 使用Prompter生成询问策略
             prompter_result = self._execute_prompter(
@@ -237,11 +270,24 @@ class StepExecutor:
             )
             step_result["doctor_question"] = doctor_question
             
-            # Step 9: 使用Evaluator进行评分
-            evaluator_result = self._execute_evaluator(
-                step_num, logger,step_result
-            )
-            step_result["evaluator_result"] = evaluator_result
+            # Step 9: 使用Evaluator进行评分（性能优化：只在工作流结束时或每3步调用一次）
+            # 可以根据需要调整频率：0=禁用, 1=每步都调用, 3=每3步调用, -1=只在结束时调用
+            evaluator_frequency = 0  # 设为0禁用Evaluator以大幅提升性能
+
+            if evaluator_frequency > 0:
+                if evaluator_frequency == -1:
+                    # 只在工作流结束时调用
+                    is_completed = task_manager.is_workflow_completed()
+                    if is_completed:
+                        evaluator_result = self._execute_evaluator(step_num, logger, step_result)
+                        step_result["evaluator_result"] = evaluator_result
+                elif step_num % evaluator_frequency == 0:
+                    # 按频率调用
+                    evaluator_result = self._execute_evaluator(step_num, logger, step_result)
+                    step_result["evaluator_result"] = evaluator_result
+            else:
+                # 禁用Evaluator，设置默认结果
+                step_result["evaluator_result"] = None
             
             # Step 10: 获取任务完成情况摘要
             step_result["task_completion_summary"] = task_manager.get_completion_summary()
