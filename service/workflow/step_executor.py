@@ -25,7 +25,7 @@ class StepExecutor:
     单step执行器
     负责执行单个step中的完整agent pipeline流程
     """
-    
+
     # 全局变量存储历史评分
     _global_historical_scores = {
         "clinical_inquiry": 0.0,
@@ -36,7 +36,7 @@ class StepExecutor:
         "past_history_similarity": 0.0,
         "chief_complaint_similarity": 0.0
     }
-    
+
     @classmethod
     def reset_historical_scores(cls):
         """重置全局历史评分"""
@@ -49,7 +49,7 @@ class StepExecutor:
             "past_history_similarity": 0.0,
             "chief_complaint_similarity": 0.0
         }
-    
+
     @staticmethod
     def extract_secondary(dept: str) -> str:
         return dept.split('-')[1] if '-' in dept else dept
@@ -57,17 +57,18 @@ class StepExecutor:
     @staticmethod
     def extract_primary(dept: str) -> str:
         return dept.split('-')[0] if '-' in dept else dept
-    
-    def __init__(self, model_type: str = "deepseek", 
-                llm_config: dict = None, 
-                 controller_mode: str = "normal", 
+
+    def __init__(self, model_type: str = "deepseek",
+                llm_config: dict = None,
+                 controller_mode: str = "sequence",  # 默认使用sequence模式提升性能
                  guidance_loader: Optional[Any] = None,
+                 skip_prompter: bool = True,  # 默认跳过Prompter以大幅提升性能
                 ):
         """
         初始化step执行器
-        
+
         Args:
-            model_type: 使用的语言模型类型（除Evaluator外的所有agent使用）
+            model_type: 使用的语言模型类型(除Evaluator外的所有agent使用)
             llm_config: 语言模型配置
             controller_mode: 任务控制器模式，'normal'为智能模式，'sequence'为顺序模式，'score_driven'为分数驱动模式
             guidance_loader: GuidanceLoader 对象，用于加载动态指导内容
@@ -76,9 +77,11 @@ class StepExecutor:
         self.model_type = model_type
         self.llm_config = llm_config or {}
         self.controller_mode = controller_mode
+        self.skip_prompter = skip_prompter
         # 定义GuidanceLoader
         self.guidance_loader = guidance_loader
-        
+        print(f"[DEBUG] StepExecutor initialized with controller_mode={controller_mode}, skip_prompter={skip_prompter}")
+
         # 初始化所有agent
         self.recipient = RecipientAgent(model_type=model_type, llm_config=self.llm_config)
         self.triager = TriageAgent(model_type=model_type, llm_config=self.llm_config)
@@ -87,8 +90,8 @@ class StepExecutor:
         simple_mode = (controller_mode == "sequence")
         score_driven_mode = (controller_mode == "score_driven")
         self.controller = TaskController(
-            model_type=model_type, 
-            llm_config=self.llm_config, 
+            model_type=model_type,
+            llm_config=self.llm_config,
             simple_mode=simple_mode,
             score_driven_mode=score_driven_mode
         )
@@ -96,7 +99,7 @@ class StepExecutor:
         self.virtual_patient = VirtualPatientAgent(model_type=model_type, llm_config=self.llm_config)
         self.evaluator = Evaluator(model_type="deepseek", llm_config=self.llm_config)
 
-    def execute_step(self, 
+    def execute_step(self,
                     step_num: int,
                     task_manager: TaskManager,
                     logger: WorkflowLogger,
@@ -113,7 +116,7 @@ class StepExecutor:
                     doctor_question: str = "") -> Dict[str, Any]:
         """
         执行单个step的完整流程
-        
+
         Args:
             step_num: step编号
             task_manager: 任务管理器
@@ -127,8 +130,8 @@ class StepExecutor:
             previous_triage_reasoning: 上轮分诊推理
             current_guidance: 当前指导文本
             is_first_step: 是否为第一个step
-            doctor_question: 医生问题（非首轮时）
-            
+            doctor_question: 医生问题(非首轮时)
+
         Returns:
             Dict: step执行结果，包含更新后的病史信息、医生问题、患者回应等
         """
@@ -151,21 +154,21 @@ class StepExecutor:
             "task_completion_summary": {},
             "errors": []
         }
-        
+
         try:
             # 更新任务管理器的当前步骤
             task_manager.current_step = step_num
-            
+
             # Step 1: 获取患者回应
             step_result["patient_response"] = patient_response
-            
+
             # 更新对话历史
             if is_first_step:
                 updated_conversation = f"患者: {patient_response}"
             else:
                 updated_conversation = conversation_history + f"\n医生: {doctor_question}\n患者: {patient_response}"
             step_result["conversation_history"] = updated_conversation
-            
+
             # Step 2: 使用Recipient更新病史信息
             recipient_result = self._execute_recipient(
                 step_num, logger, updated_conversation, previous_hpi, previous_ph, previous_chief_complaint
@@ -176,38 +179,40 @@ class StepExecutor:
                 "updated_chief_complaint": recipient_result.chief_complaint
             })
 
-            # Step 3: 并行执行独立的Agent（性能优化）
+            # Step 3: 并行执行(性能优化)+ sequence模式
             current_phase = task_manager.get_current_phase()
+            monitor_results = {}  # 跳过Monitor评估
 
+            # 执行Controller(sequence模式下很快，跳过LLM调用)
+            controller_result = self._execute_controller(
+                step_num, logger, task_manager, recipient_result
+            )
+
+            # 使用并行执行优化性能
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-                # 提交并行任务
                 futures = {}
 
-                # Monitor和Controller可以并行执行（都只依赖recipient_result）
-                # 注意：Monitor在分诊阶段需要triage_result，但在非分诊阶段不需要
-
                 if current_phase == TaskPhase.TRIAGE:
-                    # 分诊阶段：先并行执行Monitor(不带triage_result)和Controller
-                    temp_triage = {"primary_department": "", "secondary_department": "", "triage_reasoning": "", "candidate_primary_department": "", "candidate_secondary_department": ""}
-                    futures['monitor'] = executor.submit(
-                        self._execute_monitor_by_phase,
-                        step_num, logger, task_manager, recipient_result, temp_triage
-                    )
-                    futures['controller'] = executor.submit(
-                        self._execute_controller,
-                        step_num, logger, task_manager, recipient_result
-                    )
-
-                    # 等待Monitor和Controller完成
-                    concurrent.futures.wait([futures['monitor'], futures['controller']])
-
-                    # 处理Controller结果
-                    controller_result = futures['controller'].result()
-
-                    # 现在执行Triager（因为Monitor需要它）
-                    triage_result = self._execute_triager(
+                    # 分诊阶段：并行执行Triager
+                    futures['triager'] = executor.submit(
+                        self._execute_triager,
                         step_num, logger, recipient_result, previous_department, previous_candidate_department, current_guidance
                     )
+
+                    # 只有在不跳过Prompter时才并行执行
+                    if not self.skip_prompter:
+                        futures['prompter'] = executor.submit(
+                            self._execute_prompter,
+                            step_num, logger, recipient_result, controller_result
+                        )
+                        concurrent.futures.wait([futures['triager'], futures['prompter']])
+                        prompter_result = futures['prompter'].result()
+                    else:
+                        concurrent.futures.wait([futures['triager']])
+                        prompter_result = self._get_simple_prompter_result(controller_result)
+
+                    # 处理Triager结果
+                    triage_result = futures['triager'].result()
                     step_result["triage_result"] = {
                         "primary_department": triage_result.primary_department,
                         "secondary_department": triage_result.secondary_department,
@@ -219,119 +224,135 @@ class StepExecutor:
                     department = f"{triage_result.primary_department}-{triage_result.secondary_department}"
                     new_guidance = self.guidance_loader.update_guidance_for_Triager(department)
 
-                    # 获取Monitor结果（使用临时triage的）
-                    monitor_results = futures['monitor'].result()
-
                 else:
-                    # 非分诊阶段：并行执行Monitor和Controller
-                    # 使用已有的分诊结果
+                    # 非分诊阶段：使用已有的分诊结果
                     primary_department = self.extract_primary(previous_department)
                     secondary_department = self.extract_secondary(previous_department)
                     candidate_primary_department = self.extract_primary(previous_candidate_department)
                     candidate_secondary_department = self.extract_secondary(previous_candidate_department)
-                    existing_triage = {
+                    step_result["triage_result"] = {
                         "primary_department": primary_department,
                         "secondary_department": secondary_department,
                         "triage_reasoning": previous_triage_reasoning,
                         "candidate_primary_department": candidate_primary_department,
                         "candidate_secondary_department": candidate_secondary_department
                     }
-                    step_result["triage_result"] = existing_triage
-
-                    futures['monitor'] = executor.submit(
-                        self._execute_monitor_by_phase,
-                        step_num, logger, task_manager, recipient_result, existing_triage
-                    )
-                    futures['controller'] = executor.submit(
-                        self._execute_controller,
-                        step_num, logger, task_manager, recipient_result
-                    )
-
-                    # 等待Monitor和Controller完成
-                    concurrent.futures.wait([futures['monitor'], futures['controller']])
-
-                    # 获取结果
-                    monitor_results = futures['monitor'].result()
-                    controller_result = futures['controller'].result()
                     new_guidance = current_guidance
 
-            # Step 5: 更新任务分数
+                    # 只有在不跳过Prompter时才执行
+                    if not self.skip_prompter:
+                        futures['prompter'] = executor.submit(
+                            self._execute_prompter,
+                            step_num, logger, recipient_result, controller_result
+                        )
+                        concurrent.futures.wait([futures['prompter']])
+                        prompter_result = futures['prompter'].result()
+                    else:
+                        prompter_result = self._get_simple_prompter_result(controller_result)
+
+            # Step 5: 更新任务分数（传入空monitor_results）
             self._update_task_scores(step_num, logger, task_manager, monitor_results)
-            
-            # Step 7: 使用Prompter生成询问策略
-            prompter_result = self._execute_prompter(
-                step_num, logger, recipient_result, controller_result
-            )
-            
+
             # Step 8: 使用Inquirer生成医生问题
-            
             doctor_question = self._execute_inquirer(
                 step_num, logger, recipient_result, prompter_result, new_guidance
             )
             step_result["doctor_question"] = doctor_question
-            
-            # Step 9: 使用Evaluator进行评分（性能优化：只在工作流结束时或每3步调用一次）
-            # 可以根据需要调整频率：0=禁用, 1=每步都调用, 3=每3步调用, -1=只在结束时调用
-            evaluator_frequency = 0  # 设为0禁用Evaluator以大幅提升性能
+
+            # Step 9: 使用Evaluator进行评分(性能优化：禁用以大幅提升性能)
+            evaluator_frequency = 0  # 设为0禁用Evaluator
 
             if evaluator_frequency > 0:
                 if evaluator_frequency == -1:
-                    # 只在工作流结束时调用
                     is_completed = task_manager.is_workflow_completed()
                     if is_completed:
                         evaluator_result = self._execute_evaluator(step_num, logger, step_result)
                         step_result["evaluator_result"] = evaluator_result
                 elif step_num % evaluator_frequency == 0:
-                    # 按频率调用
                     evaluator_result = self._execute_evaluator(step_num, logger, step_result)
                     step_result["evaluator_result"] = evaluator_result
             else:
                 # 禁用Evaluator，设置默认结果
                 step_result["evaluator_result"] = None
-            
+
             # Step 10: 获取任务完成情况摘要
             step_result["task_completion_summary"] = task_manager.get_completion_summary()
             step_result["new_guidance"] = new_guidance
-            
+
             step_result["success"] = True
-            
+
         except Exception as e:
             error_msg = f"Step {step_num} 执行失败: {str(e)}"
             step_result["errors"].append(error_msg)
             logger.log_error(step_num, "step_execution_error", error_msg,)
             print(error_msg)
-        
+
         return step_result
-    
-    
-    def _execute_recipient(self, step_num: int, logger: WorkflowLogger, 
-                          conversation_history: str, previous_hpi: str, 
+
+    def _get_simple_prompter_result(self, controller_result) -> object:
+        """
+        生成简化的Prompter结果，避免LLM调用
+
+        当skip_prompter=True时使用此方法，返回固定的简化结果
+
+        Args:
+            controller_result: Controller的执行结果
+
+        Returns:
+            object: 简化的Prompter结果对象
+        """
+        # 创建一个简单的PrompterResult对象
+        class SimplePrompterResult:
+            def __init__(self, description, instructions):
+                self.description = description
+                self.instructions = instructions
+
+        current_task = controller_result.selected_task
+        specific_guidance = controller_result.specific_guidance
+
+        return SimplePrompterResult(
+            description=f"你是一名专业的预问诊询问医生，负责针对'{current_task}'进行详细的询问信息收集。",
+            instructions=[
+                f"## 核心任务",
+                f"1. 围绕'{current_task}'主题进行系统性询问",
+                f"2. 基于以下指导重点进行询问：{specific_guidance}",
+                "",
+                "## 询问原则",
+                "- 使用通俗易懂的语言与患者交流",
+                "- 确保询问信息的准确性和完整性",
+                "- 避免重复询问已知信息",
+                "- 专注于通过询问获取关键信息"
+            ]
+        )
+
+    def _execute_recipient(self, step_num: int, logger: WorkflowLogger,
+                          conversation_history: str, previous_hpi: str,
                           previous_ph: str, previous_chief_complaint: str):
         """执行Recipient agent"""
         start_time = time.time()
-        
+
         input_data = {
             "conversation_history": conversation_history,
             "previous_HPI": previous_hpi,
             "previous_PH": previous_ph,
             "previous_chief_complaint": previous_chief_complaint
         }
-        
+
         result = self.recipient.run(**input_data)
         execution_time = time.time() - start_time
-        
+
         output_data = {
             "updated_HPI": result.updated_HPI,
             "updated_PH": result.updated_PH,
             "chief_complaint": result.chief_complaint
         }
-        
+
         logger.log_agent_execution(step_num, "recipient", input_data, output_data, execution_time)
-        
+
         return result
-    
-    def _execute_triager(self, step_num: int, logger: WorkflowLogger, 
-                        recipient_result, previous_department: str, 
+
+    def _execute_triager(self, step_num: int, logger: WorkflowLogger,
+                        recipient_result, previous_department: str,
                         previous_candidate_department: str, current_guidance: str):
         """执行Triage agent进行科室分诊"""
         start_time = time.time()
@@ -355,10 +376,10 @@ class StepExecutor:
             "ph_content": recipient_result.updated_PH,
             "current_guidance": combined_guidance,
         }
-        
+
         result = self.triager.run(**input_data)
         execution_time = time.time() - start_time
-        
+
         output_data = {
             "primary_department": result.primary_department,
             "secondary_department": result.secondary_department,
@@ -370,33 +391,33 @@ class StepExecutor:
         log_input_data = input_data.copy()
         log_input_data["used_comparison_guidance"] = bool(comparison_guidance)
         logger.log_agent_execution(step_num, "triager", input_data, output_data, execution_time)
-        
+
         return result
-    
-    def _execute_monitor_by_phase(self, step_num: int, logger: WorkflowLogger, 
+
+    def _execute_monitor_by_phase(self, step_num: int, logger: WorkflowLogger,
                                  task_manager: TaskManager, recipient_result, triage_result: Dict[str, Any] = None) -> Dict[str, Dict[str, float]]:
         """按阶段执行Monitor评估，只评估当前阶段未完成的任务"""
         monitor_results = {}
         current_phase = task_manager.get_current_phase()
-        
+
         # 如果所有任务都完成了，不需要评估
         if current_phase == TaskPhase.COMPLETED:
             return monitor_results
-        
+
         # 获取当前阶段未完成的任务
         pending_tasks = task_manager.get_pending_tasks(current_phase)
         if not pending_tasks:
             return monitor_results
-        
+
         start_time = time.time()
-        
+
         try:
             # 使用for循环逐个评估所有未完成的任务
             phase_scores = {}
             for task in pending_tasks:
                 task_name = task.get("name", "")
                 task_description = task.get("description", "")
-                
+
                 # 调用Monitor评估特定任务
                 # 分诊阶段传入triage_result，其他阶段不传入
                 if current_phase == TaskPhase.TRIAGE:
@@ -418,13 +439,13 @@ class StepExecutor:
                         task_name=task_name,
                         task_description=task_description
                     )
-                
+
                 phase_scores[task_name] = monitor_result.completion_score
                 print(f"任务'{task_name}'评分: {monitor_result.completion_score:.2f} - {monitor_result.reason}")
-            
+
             execution_time = time.time() - start_time
             monitor_results[current_phase] = phase_scores
-            
+
             # 记录日志
             input_data = {
                 "hpi_content": recipient_result.updated_HPI,
@@ -433,25 +454,25 @@ class StepExecutor:
                 "evaluated_phase": current_phase.value,
                 "pending_tasks": [t["name"] for t in pending_tasks]
             }
-            
+
             output_data = {
                 "phase_scores": phase_scores,
                 "evaluated_tasks": list(phase_scores.keys()),
                 "average_score": sum(phase_scores.values()) / len(phase_scores) if phase_scores else 0.0
             }
-            
+
             logger.log_agent_execution(step_num, "monitor", input_data, output_data, execution_time)
-            
+
         except Exception as e:
             error_msg = f"Monitor执行失败: {str(e)}"
             logger.log_error(step_num, "monitor_error", error_msg)
             # 返回默认的低分评估
             phase_scores = {task["name"]: 0.1 for task in pending_tasks}
             monitor_results[current_phase] = phase_scores
-        
+
         return monitor_results
-    
-    def _update_task_scores(self, step_num: int, logger: WorkflowLogger, 
+
+    def _update_task_scores(self, step_num: int, logger: WorkflowLogger,
                            task_manager: TaskManager, monitor_results: Dict):
         """更新任务分数"""
         for phase, scores in monitor_results.items():
@@ -459,18 +480,18 @@ class StepExecutor:
                 old_scores = task_manager.get_task_scores(phase).copy()
                 task_manager.update_task_scores(phase, scores)
                 new_scores = task_manager.get_task_scores(phase)
-                
+
                 logger.log_task_scores_update(step_num, phase.value, old_scores, new_scores)
-    
-    def _execute_controller(self, step_num: int, logger: WorkflowLogger, 
+
+    def _execute_controller(self, step_num: int, logger: WorkflowLogger,
                            task_manager: TaskManager, recipient_result):
         """执行Controller agent"""
         start_time = time.time()
-        
+
         # 获取当前阶段的未完成任务
         current_phase = task_manager.get_current_phase()
         pending_tasks = task_manager.get_pending_tasks(current_phase)
-        
+
         input_data = {
             "pending_tasks": pending_tasks,
             "chief_complaint": recipient_result.chief_complaint,
@@ -478,11 +499,11 @@ class StepExecutor:
             "ph_content": recipient_result.updated_PH,
             "task_manager": task_manager  # 传递task_manager用于score_driven模式
         }
-        
+
         result = self.controller.run(**input_data)
         execution_time = time.time() - start_time
-        
-        # 为日志记录创建可序列化的input_data副本（移除TaskManager对象）
+
+        # 为日志记录创建可序列化的input_data副本(移除TaskManager对象)
         log_input_data = {
             "pending_tasks": input_data["pending_tasks"],
             "chief_complaint": input_data["chief_complaint"],
@@ -490,21 +511,21 @@ class StepExecutor:
             "ph_content": input_data["ph_content"]
             # 不包含task_manager，因为它不能JSON序列化
         }
-        
+
         output_data = {
             "selected_task": result.selected_task,
             "specific_guidance": result.specific_guidance
         }
-        
+
         logger.log_agent_execution(step_num, "controller", log_input_data, output_data, execution_time)
-        
+
         return result
-    
-    def _execute_prompter(self, step_num: int, logger: WorkflowLogger, 
+
+    def _execute_prompter(self, step_num: int, logger: WorkflowLogger,
                          recipient_result, controller_result):
         """执行Prompter agent"""
         start_time = time.time()
-        
+
         input_data = {
             "hpi_content": recipient_result.updated_HPI,
             "ph_content": recipient_result.updated_PH,
@@ -512,20 +533,20 @@ class StepExecutor:
             "current_task": controller_result.selected_task,
             "specific_guidance": controller_result.specific_guidance
         }
-        
+
         result = self.prompter.run(**input_data)
         execution_time = time.time() - start_time
-        
+
         output_data = {
             "description": result.description,
             "instructions": result.instructions
         }
-        
+
         logger.log_agent_execution(step_num, "prompter", input_data, output_data, execution_time)
-        
+
         return result
-    
-    def _execute_inquirer(self, step_num: int, logger: WorkflowLogger, 
+
+    def _execute_inquirer(self, step_num: int, logger: WorkflowLogger,
                          recipient_result, prompter_result,
                          new_guidance) -> str:
         """执行Inquirer agent"""
@@ -540,31 +561,30 @@ class StepExecutor:
                 llm_config=self.llm_config,
                 department_inquiry_guidance=new_guidance,
             )
-            
+
             input_data = {
                 "hpi_content": recipient_result.updated_HPI,
                 "ph_content": recipient_result.updated_PH,
                 "chief_complaint": recipient_result.chief_complaint
             }
-            
+
             result = inquirer.run(**input_data)
             execution_time = time.time() - start_time
-            
+
             doctor_question = result.current_chat
-            
+
             output_data = {"doctor_question": doctor_question}
-            
+
             logger.log_agent_execution(step_num, "inquirer", input_data, output_data, execution_time)
-            
+
             return doctor_question
-            
+
         except Exception as e:
             error_msg = f"Inquirer执行失败: {str(e)}"
             logger.log_error(step_num, "inquirer_error", error_msg)
             # 返回默认问题
             return "请您详细描述一下您的症状，包括什么时候开始的，有什么特点？"
 
-    
     def _execute_evaluator(self, step_num: int, logger: WorkflowLogger,
                            step_result: Dict[str, Any]):
         """执行Evaluator agent"""
@@ -581,7 +601,7 @@ class StepExecutor:
                 "chief_complaint": step_result.get("updated_chief_complaint", "")
             }
 
-            # 构建工程模式下的简化 patient_case（用于 evaluator）
+            # 构建工程模式下的简化 patient_case(用于 evaluator)
             patient_case = {
                 "病案介绍": {
                     "主诉": step_result.get("updated_chief_complaint", ""),
@@ -589,10 +609,10 @@ class StepExecutor:
                     "既往史": step_result.get("updated_ph", "")
                 }
             }
-            
+
             # 使用全局历史评分
             historical_scores = self._global_historical_scores
-            
+
             # 调用评价器进行评价，传入完整对话历史和历史评分
             input_data = {
                 "current_round": step_num,
@@ -600,14 +620,14 @@ class StepExecutor:
                 "conversation_history": conversation_history,
                 "historical_scores": historical_scores  # 添加历史评分作为明确参数
             }
-            
+
             # 构建所有轮次的数据用于多轮评估
             all_rounds_data = []
-            
+
             # 从对话历史中提取每轮数据
             lines = conversation_history.strip().split('\n')
             current_round_data = {}
-            
+
             for line in lines:
                 line = line.strip()
                 if line.startswith('医生:') and current_round_data:
@@ -622,7 +642,7 @@ class StepExecutor:
                 elif line.startswith('患者:'):
                     # 第一轮只有患者回应
                     current_round_data = {"doctor_inquiry": "", "patient_response": line[3:].strip()}
-            
+
             # 添加最后一轮
             if current_round_data:
                 current_round_data.update({
@@ -631,7 +651,7 @@ class StepExecutor:
                     "chief_complaint": step_result.get("updated_chief_complaint", "")
                 })
                 all_rounds_data.append(current_round_data)
-            
+
             # 为所有轮次添加evaluation_scores，使用全局历史评分
             for i, round_data in enumerate(all_rounds_data):
                 if i < step_num - 1:  # 历史轮次
@@ -648,7 +668,7 @@ class StepExecutor:
                         "past_history_similarity": 0.0,
                         "chief_complaint_similarity": 0.0
                     }
-            
+
             # 调用支持多轮的评估方法
             result = self.evaluator.run(
                 patient_case=patient_case,
@@ -656,9 +676,9 @@ class StepExecutor:
                 all_rounds_data=all_rounds_data,
                 historical_scores=historical_scores
             )
-            
+
             execution_time = time.time() - start_time
-            
+
             output_data = {
                 "clinical_inquiry": {
                     "score": result.clinical_inquiry.score,
@@ -691,9 +711,9 @@ class StepExecutor:
                 "summary": result.summary,
                 "key_suggestions": result.key_suggestions
             }
-            
+
             logger.log_agent_execution(step_num, "evaluator", input_data, output_data, execution_time)
-            
+
             # 更新全局历史评分
             self._global_historical_scores = {
                 "clinical_inquiry": result.clinical_inquiry.score,
@@ -704,15 +724,15 @@ class StepExecutor:
                 "past_history_similarity": result.past_history_similarity.score,
                 "chief_complaint_similarity": result.chief_complaint_similarity.score
             }
-            
+
             return result
-            
+
         except Exception as e:
             error_msg = f"Evaluator执行失败: {str(e)}"
             logger.log_error(step_num, "evaluator_error", error_msg)
             # 返回默认评价结果
             from agent_system.evaluator.response_model import EvaluatorResult, EvaluationDimension
-            
+
             default_dimension = EvaluationDimension(score=0.0, comment="评价失败")
             return EvaluatorResult(
                 clinical_inquiry=default_dimension,

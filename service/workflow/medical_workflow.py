@@ -12,8 +12,8 @@ class MedicalWorkflow:
     
     def __init__(self,  model_type: str = "deepseek", 
                  llm_config: Optional[Dict] = None, max_steps: int = 30, log_dir: str = "logs",
-                 controller_mode: str = "normal",
-                 guidance_loader: Optional[Any] = None,department_guidance: str = "",):
+                 controller_mode: str = "sequence",  # 默认使用sequence模式提升性能
+                 guidance_loader: Optional[Any] = None,department_guidance: str = "", skip_prompter: bool = True):
         """
         初始化医疗问诊工作流
         
@@ -22,21 +22,24 @@ class MedicalWorkflow:
             llm_config: 语言模型配置，默认为None
             max_steps: 最大执行步数，默认为30
             log_dir: 日志目录，默认为"logs"
-            controller_mode: 任务控制器模式，'normal'为智能模式，'sequence'为顺序模式，'score_driven'为分数驱动模式
+            controller_mode: 任务控制器模式，'normal'为智能模式，'sequence'为顺序模式，'score_driven'为分数驱动模式，默认为'sequence'以提升性能
             guidance_loader: GuidanceLoader实例，用于加载动态指导内容
+            skip_prompter: 是否跳过Prompter，默认为True以大幅提升性能
             department_guidance: 科室指导内容，默认为空字符串(如果在初始化时传入了固定的科室指导（例如通过 --department_filter 参数指定），current_guidance 会被设置为该固定指导内容。如果没有传入固定指导，current_guidance 初始值为空字符串 "")
         """
         self.model_type = model_type
         self.llm_config = llm_config or {}
+        self.skip_prompter = skip_prompter
         self.max_steps = max_steps
         
         # 初始化核心组件
         self.task_manager = TaskManager()
         self.step_executor = StepExecutor(
-            model_type=model_type, 
-            llm_config=self.llm_config, 
+            model_type=model_type,
+            llm_config=self.llm_config,
             controller_mode=controller_mode,
             guidance_loader=guidance_loader,  # 将 GuidanceLoader 传递给 StepExecutor
+            skip_prompter=True  # 默认跳过Prompter以大幅提升性能
         )
         
         # 重置历史评分，确保新的工作流从零开始
