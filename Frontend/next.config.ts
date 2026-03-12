@@ -1,0 +1,11 @@
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_MEDSYNTHAI_FRONTEND_API_HOST: process.env.NEXT_PUBLIC_MEDSYNTHAI_FRONTEND_API_HOST || '127.0.0.1',
+    NEXT_PUBLIC_MEDSYNTHAI_FRONTEND_API_PORT: process.env.NEXT_PUBLIC_MEDSYNTHAI_FRONTEND_API_PORT || '8000',
+    NEXT_PUBLIC_MEDSYNTHAI_FRONTEND_TTS_PORT: process.env.NEXT_PUBLIC_MEDSYNTHAI_FRONTEND_TTS_PORT || '8003',
+  },
+};
+
+export default nextConfig;
